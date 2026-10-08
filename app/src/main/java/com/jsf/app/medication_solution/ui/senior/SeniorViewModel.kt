@@ -35,7 +35,8 @@ data class SeniorUiState(
     val doubleDoseMedName: String = "",
     val isMonitored: Boolean = false,
     val hasVoiceNote: Boolean = false,
-    val dailyChallenge: String? = null
+    val dailyChallenge: String? = null,
+    val selectedDayOffset: Int = 0
 )
 
 class SeniorViewModel : ViewModel() {
@@ -186,6 +187,10 @@ class SeniorViewModel : ViewModel() {
         val doses = _state.value.todayDoses
         val taken = doses.count { it.isTaken() }
         return Pair(taken, doses.size)
+    }
+
+    fun selectDay(offset: Int) {
+        _state.value = _state.value.copy(selectedDayOffset = offset)
     }
 
     fun seedDemoMedications() {

@@ -393,9 +393,9 @@ private fun WelcomePrompt(seniorName: String, onSuggestion: (String) -> Unit = {
         Spacer(Modifier.height(32.dp))
         // Quick suggestion chips
         val suggestions = listOf(
+            "நான் மாத்திரை எடுத்துவிட்டேன்",
             "Did I take my BP tablet?",
             "What medicines do I take now?",
-            "How am I doing today?",
             "I'm not feeling well"
         )
         suggestions.forEach { suggestion ->

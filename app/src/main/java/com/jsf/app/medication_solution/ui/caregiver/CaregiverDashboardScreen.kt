@@ -28,7 +28,9 @@ import coil.compose.AsyncImage
 import com.jsf.app.medication_solution.data.model.Alert
 import com.jsf.app.medication_solution.data.model.AlertSeverity
 import com.jsf.app.medication_solution.data.model.ConversationReport
+import com.jsf.app.medication_solution.data.model.DoseRecord
 import com.jsf.app.medication_solution.data.model.Medication
+import com.jsf.app.medication_solution.data.model.MoodRecord
 import com.jsf.app.medication_solution.service.VoiceAlarmManager
 import com.jsf.app.medication_solution.ui.theme.CareBlue
 import com.jsf.app.medication_solution.ui.theme.MedGreen
@@ -183,74 +185,55 @@ fun CaregiverDashboardScreen(
             } else {
                 val snap = state.seniorSnapshot!!
 
-                // Emergency alert
+                // 1. Patient header + streak
+                item { PatientHeaderSummaryCard(snap = snap, streak = state.streak) }
+
+                // 2. Emergency alert
                 if (snap.inactiveMinutes > 30 && state.emergencyContactPhone.isNotBlank()) {
                     item {
                         Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)), shape = RoundedCornerShape(12.dp)) {
                             Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text("🚨", fontSize = 28.sp)
+                                Text("🚨", fontSize = 24.sp)
                                 Spacer(Modifier.width(8.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("No activity for ${snap.inactiveMinutes} minutes!", fontWeight = FontWeight.Bold, color = Color.Red)
-                                    Text("Check if ${snap.user.name} is okay", style = MaterialTheme.typography.bodySmall)
+                                    Text("${snap.inactiveMinutes} நிமிடம் செயல்பாடு இல்லை!", fontWeight = FontWeight.Bold, color = Color.Red, style = MaterialTheme.typography.bodyMedium)
+                                    Text("(No activity for ${snap.inactiveMinutes} min!)", style = MaterialTheme.typography.labelSmall, color = Color(0xFF7F0000))
                                 }
                                 Button(onClick = {
-                                    val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:${state.emergencyContactPhone}"))
-                                    context.startActivity(intent)
-                                }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red)) {
-                                    Text("Call", color = Color.White)
+                                    runCatching { context.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:${state.emergencyContactPhone}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                                }, colors = ButtonDefaults.buttonColors(containerColor = Color.Red), contentPadding = PaddingValues(horizontal = 12.dp)) {
+                                    Text("அழை (Call)", color = Color.White, style = MaterialTheme.typography.labelMedium)
                                 }
                             }
                         }
                     }
                 }
 
-                // Status header
-                item { PatientStatusCard(snapshot = snap, streak = state.streak, onViewDetail = { onViewSeniorDetail(snap.user.id) }) }
+                // 3. Today's summary progress
+                item { TodaySummaryCard(doses = snap.todayDoses) }
 
-                // Camera + emotion
-                item {
-                    CameraMonitorCard(
-                        enabled = state.isMonitoringEnabled,
-                        snapshotUrl = state.cameraSnapshotUrl,
-                        onToggle = viewModel::toggleMonitoring,
-                        onRefresh = viewModel::refreshCameraSnapshot
-                    )
-                }
+                // 4. Medicine status flat list
+                item { MedicineStatusListCard(doses = snap.todayDoses, medications = state.medications) }
 
-                // Medication progress
-                item { MedicationProgressCard(medications = state.medications, doses = snap.todayDoses) }
+                // 5. Mood + Vitals row
+                item { MoodVitalsRow(mood = snap.latestMood, bp = state.vitalBP, hr = state.vitalHR, spo2 = state.vitalSpO2, onRefreshVitals = viewModel::simulateVitals) }
 
-                // Health vitals
-                item { HealthVitalsCard(bp = state.vitalBP, hr = state.vitalHR, spo2 = state.vitalSpO2, onRefresh = viewModel::simulateVitals) }
-
-                // Quick actions
-                item {
-                    Text("Quick Actions", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1A237E))
-                }
+                // 6. Quick actions
                 item {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        QuickActionButton(emoji = "🎙️", label = "Alarm Voice", modifier = Modifier.weight(1f), onClick = viewModel::showVoiceAlarmRecorder)
-                        QuickActionButton(emoji = "💌", label = "Voice Note", modifier = Modifier.weight(1f), onClick = viewModel::showFamilyNoteRecorder)
-                        QuickActionButton(emoji = "🚨", label = "Emergency", modifier = Modifier.weight(1f), onClick = viewModel::showEmergencyDialog)
-                        QuickActionButton(emoji = "💬", label = "Check-in", modifier = Modifier.weight(1f), onClick = { viewModel.scheduleImmediateCheckIn(context) })
+                        OutlinedButton(onClick = viewModel::toggleMonitoring, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = if (state.isMonitoringEnabled) MedGreen else Color.Gray)) {
+                            Text(if (state.isMonitoringEnabled) "📷 ON" else "📷 OFF", style = MaterialTheme.typography.labelSmall)
+                        }
+                        OutlinedButton(onClick = viewModel::showFamilyNoteRecorder, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = CareBlue)) {
+                            Text("💌 குரல்", style = MaterialTheme.typography.labelSmall)
+                        }
+                        OutlinedButton(onClick = viewModel::showEmergencyDialog, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.Red)) {
+                            Text("🚨 SOS", style = MaterialTheme.typography.labelSmall)
+                        }
+                        Button(onClick = { onViewSeniorDetail(snap.user.id) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = CareBlue)) {
+                            Text("⚙️", color = Color.White)
+                        }
                     }
-                }
-
-                // Check-in interval
-                item { CheckInScheduleCard(intervalMinutes = state.checkInIntervalMinutes, onSetInterval = { viewModel.setCheckInInterval(context, it) }) }
-
-                // Conversation reports
-                if (state.conversationReports.isNotEmpty()) {
-                    item { Text("Voice Reports", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1A237E)) }
-                    items(state.conversationReports.take(3)) { report -> ConversationReportCard(report = report) }
-                }
-
-                // Alerts
-                val unresolvedAlerts = state.alerts.filter { !it.isResolved }
-                if (unresolvedAlerts.isNotEmpty()) {
-                    item { Text("Alerts", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1A237E)) }
-                    items(unresolvedAlerts.take(5)) { alert -> AlertCard(alert = alert, onResolve = { viewModel.resolveAlert(alert.id) }) }
                 }
             }
 
@@ -606,6 +589,138 @@ private fun LinkSeniorDialog(email: String, onEmailChange: (String) -> Unit, onL
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     )
+}
+
+@Composable
+private fun PatientHeaderSummaryCard(snap: SeniorSnapshot, streak: Int) {
+    val lastSeen = when {
+        snap.inactiveMinutes < 1 -> "இப்போது (Just now)"
+        snap.inactiveMinutes < 60 -> "${snap.inactiveMinutes} நிமிடம் முன்பு"
+        else -> "${snap.inactiveMinutes / 60} மணி முன்பு"
+    }
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(3.dp)) {
+        Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(modifier = Modifier.size(52.dp).clip(CircleShape).background(levelToColor(snap.statusLevel).copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+                Text("👴", fontSize = 28.sp)
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(snap.user.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("கடைசியாக: $lastSeen", style = MaterialTheme.typography.bodySmall, color = if (snap.inactiveMinutes > 30) Color(0xFFF57F17) else Color.Gray)
+                if (streak > 0) Text("🔥 $streak நாள் தொடர்ச்சி!", style = MaterialTheme.typography.labelMedium, color = Color(0xFFFF6F00), fontWeight = FontWeight.Bold)
+            }
+            StatusBadge(level = snap.statusLevel)
+        }
+    }
+}
+
+@Composable
+private fun TodaySummaryCard(doses: List<DoseRecord>) {
+    val taken = doses.count { it.isTaken() }
+    val missed = doses.count { it.isMissed() || it.isOverdue() }
+    val pending = doses.size - taken - missed
+    val total = doses.size
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), elevation = CardDefaults.cardElevation(2.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("இன்றைய சுருக்கம் (Today's Summary)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color(0xFF1B5E20))
+            Spacer(Modifier.height(8.dp))
+            if (total > 0) {
+                LinearProgressIndicator(
+                    progress = { taken.toFloat() / total },
+                    modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
+                    color = MedGreen, trackColor = Color(0xFFE0E0E0)
+                )
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), color = MedGreen.copy(alpha = 0.15f)) {
+                        Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$taken", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = MedGreen)
+                            Text("எடுத்தது", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                    }
+                    Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), color = Color(0xFFFFEBEE)) {
+                        Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$missed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = Color.Red)
+                            Text("தவறியது", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                    }
+                    Surface(modifier = Modifier.weight(1f), shape = RoundedCornerShape(10.dp), color = Color(0xFFFFF3E0)) {
+                        Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("$pending", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.ExtraBold, color = Color(0xFFF57C00))
+                            Text("காத்திருக்கிறது", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                    }
+                }
+            } else {
+                Text("இன்று மருந்துகள் திட்டமிடப்படவில்லை", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MedicineStatusListCard(doses: List<DoseRecord>, medications: List<Medication>) {
+    if (doses.isEmpty()) return
+    val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(2.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text("💊 மருந்து நிலை (Medicine Status)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color(0xFF1A237E))
+            Spacer(Modifier.height(8.dp))
+            doses.forEach { dose ->
+                val med = medications.find { it.id == dose.medicationId }
+                val pillEmoji = med?.pillEmoji ?: "💊"
+                val (statusLabel, statusColor) = when {
+                    dose.isTaken() -> "எடுத்தது ✅" to MedGreen
+                    dose.isMissed() || dose.isOverdue() -> "தவறியது ❌" to Color.Red
+                    else -> "நேரம் எதிர்பார்க்கிறது ⏳" to Color(0xFFF57C00)
+                }
+                Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(pillEmoji, fontSize = 22.sp, modifier = Modifier.width(32.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(dose.medicationName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(timeFmt.format(Date(dose.scheduledTime)), style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    }
+                    Surface(shape = RoundedCornerShape(8.dp), color = statusColor.copy(alpha = 0.12f)) {
+                        Text(statusLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = statusColor, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                if (dose != doses.last()) HorizontalDivider(color = Color(0xFFEEEEEE), thickness = 0.5.dp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MoodVitalsRow(mood: MoodRecord?, bp: String, hr: Int, spo2: Int, onRefreshVitals: () -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Mood card
+        Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFFCE4EC)), elevation = CardDefaults.cardElevation(2.dp)) {
+            Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("மனநிலை", style = MaterialTheme.typography.labelMedium, color = Color(0xFF880E4F), fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                if (mood != null) {
+                    Text(mood.moodLevel().emoji, fontSize = 32.sp)
+                    Text(mood.moodLevel().label, style = MaterialTheme.typography.bodySmall, color = Color(0xFF880E4F), textAlign = TextAlign.Center)
+                } else {
+                    Text("😐", fontSize = 32.sp)
+                    Text("தெரியவில்லை", style = MaterialTheme.typography.labelSmall, color = Color.Gray, textAlign = TextAlign.Center)
+                }
+            }
+        }
+        // Vitals card
+        Card(modifier = Modifier.weight(1f), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = Color(0xFFEDE7F6)), elevation = CardDefaults.cardElevation(2.dp)) {
+            Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("உடல் நலன்", style = MaterialTheme.typography.labelMedium, color = Color(0xFF4A148C), fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                    IconButton(onClick = onRefreshVitals, modifier = Modifier.size(20.dp)) { Icon(Icons.Default.Refresh, null, tint = Color(0xFF4A148C), modifier = Modifier.size(16.dp)) }
+                }
+                Spacer(Modifier.height(4.dp))
+                Text("❤️ $bp mmHg", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4A148C))
+                Text("💓 $hr bpm", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4A148C))
+                Text("🫁 $spo2% SpO2", style = MaterialTheme.typography.labelSmall, color = Color(0xFF4A148C))
+            }
+        }
+    }
 }
 
 private fun levelToColor(level: SeniorStatusLevel): Color = when (level) {

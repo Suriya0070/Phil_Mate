@@ -239,8 +239,49 @@ RULES:
         _state.value = _state.value.copy(voiceState = VoiceState.IDLE)
     }
 
+    private fun tryAutoConfirmFromVoice(userText: String): String? {
+        val lower = userText.lowercase()
+        val tookPatterns = listOf("potuten", "potutten", "potuten", "took", "taken", "eduthen", "eduten", "saptuten", "saptten", "consumed", "had my", "finished my", "எடுத்துவிட்டேன்", "சாப்பிட்டேன்")
+        if (tookPatterns.none { lower.contains(it) }) return null
+
+        val doses = _state.value.todayDoses
+        for (dose in doses) {
+            if (dose.isTaken()) continue
+            val medName = dose.medicationName.lowercase()
+            val words = medName.split(" ", "-")
+            val mentioned = words.any { w -> w.length > 3 && lower.contains(w) } || lower.contains(medName)
+            if (mentioned) {
+                viewModelScope.launch { medRepo.confirmDose(dose, null) }
+                return "✅ ${dose.medicationName} எடுத்துவிட்டீர்கள்! (Marked as taken!) சாபாஷ்! 👏"
+            }
+        }
+        val pending = doses.filter { !it.isTaken() && !it.isMissed() }
+        if (pending.size == 1) {
+            val dose = pending.first()
+            viewModelScope.launch { medRepo.confirmDose(dose, null) }
+            return "✅ ${dose.medicationName} எடுத்துவிட்டீர்கள்! (Marked as taken!) சாபாஷ்! 👏"
+        }
+        return null
+    }
+
     fun sendMessage(text: String) {
         if (text.isBlank()) return
+
+        // Auto-confirm medicine from voice BEFORE sending to Ollama
+        val autoMsg = tryAutoConfirmFromVoice(text)
+        if (autoMsg != null) {
+            val userTurn = ConversationTurn(isUser = true, text = text)
+            val botTurn = ConversationTurn(isUser = false, text = autoMsg, emotion = DetectedEmotion.HAPPY)
+            emotionCounts["HAPPY"] = (emotionCounts["HAPPY"] ?: 0) + 1
+            _state.value = _state.value.copy(
+                conversation = _state.value.conversation + userTurn + botTurn,
+                detectedEmotion = DetectedEmotion.HAPPY,
+                voiceState = VoiceState.SPEAKING,
+                currentTranscript = ""
+            )
+            speak(autoMsg.replace("✅", "").replace("👏", "").replace("சாபாஷ்!", "Shabash!").replace("எடுத்துவிட்டீர்கள்!", "Eduthuvidteeergal!"))
+            return
+        }
 
         buildSystemPrompt(
             _state.value.seniorName,
