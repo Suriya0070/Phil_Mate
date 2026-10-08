@@ -149,7 +149,7 @@ fun CaregiverDashboardScreen(
                 actions = {
                     IconButton(onClick = onLogout) { Icon(Icons.Default.ExitToApp, "Logout", tint = Color.White) }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = CareBlue)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFF263238))
             )
         }
     ) { padding ->
@@ -159,7 +159,7 @@ fun CaregiverDashboardScreen(
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize().background(Color(0xFFF0F4FF)).padding(padding),
+            modifier = Modifier.fillMaxSize().background(Color(0xFFF5F5F5)).padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {

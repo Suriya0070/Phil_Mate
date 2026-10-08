@@ -193,6 +193,31 @@ class SeniorViewModel : ViewModel() {
         _state.value = _state.value.copy(selectedDayOffset = offset)
     }
 
+    fun confirmDoseByVoice(spokenText: String) {
+        val lower = spokenText.lowercase()
+        val tookPatterns = listOf("potuten", "potutten", "took", "taken", "eduthen", "eduten", "saptuten", "போட்டுட்டேன்", "எடுத்துட்டேன்", "சாப்பிட்டுட்டேன்")
+        if (tookPatterns.none { lower.contains(it) }) return
+        val doses = _state.value.todayDoses
+        for (dose in doses) {
+            if (dose.isTaken() || dose.isMissed()) continue
+            val words = dose.medicationName.lowercase().split(" ", "-")
+            if (words.any { it.length > 3 && lower.contains(it) } || lower.contains(dose.medicationName.lowercase())) {
+                viewModelScope.launch {
+                    medRepo.confirmDose(dose, null)
+                    _state.value = _state.value.copy(successMessage = "✅ ${dose.medicationName} எடுத்துவிட்டீர்கள்! (Marked as taken!)")
+                }
+                return
+            }
+        }
+        val pending = doses.filter { !it.isTaken() && !it.isMissed() }
+        if (pending.size == 1) {
+            viewModelScope.launch {
+                medRepo.confirmDose(pending.first(), null)
+                _state.value = _state.value.copy(successMessage = "✅ ${pending.first().medicationName} எடுத்துவிட்டீர்கள்! (Marked as taken!)")
+            }
+        }
+    }
+
     fun seedDemoMedications() {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch { medRepo.seedDemoData(uid) }

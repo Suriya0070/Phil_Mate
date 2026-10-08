@@ -1,5 +1,10 @@
 package com.jsf.app.medication_solution.ui.senior
 
+import android.app.Activity
+import android.content.Intent
+import android.speech.RecognizerIntent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -19,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
@@ -57,6 +64,15 @@ fun SeniorHomeScreen(
     val state by viewModel.state.collectAsState()
     val (taken, total) = viewModel.getAdherenceToday()
     val context = LocalContext.current
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: ""
+            if (text.isNotBlank()) viewModel.confirmDoseByVoice(text)
+        }
+    }
 
     val greeting = run {
         val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
@@ -118,6 +134,18 @@ fun SeniorHomeScreen(
                     containerColor = MedGreen,
                     contentColor = Color.White
                 )
+            } else {
+                FloatingActionButton(
+                    onClick = {
+                        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ta-IN")
+                            putExtra(RecognizerIntent.EXTRA_PROMPT, "நான் [மருந்து] போட்டுட்டேன் என்று சொல்லுங்கள்")
+                        }
+                        speechLauncher.launch(intent)
+                    },
+                    containerColor = MedGreen
+                ) { Icon(Icons.Default.Mic, "Quick voice confirm", tint = Color.White) }
             }
         }
     ) { padding ->
@@ -281,10 +309,9 @@ private fun DayMedicationView(
                     mapped in slot.range
                 }
                 if (slotDoses.isNotEmpty()) {
-                    TimeSlotSection(label = slot.label, emoji = slot.emoji) {
+                    TimeSlotSection(label = slot.label, emoji = slot.emoji, count = slotDoses.size) {
                         slotDoses.forEach { dose ->
                             val med = medications.find { it.id == dose.medicationId }
-                            Spacer(Modifier.height(6.dp))
                             DoseMedicineCard(dose = dose, medication = med, onConfirm = { onConfirm(dose) })
                         }
                     }
@@ -298,14 +325,13 @@ private fun DayMedicationView(
                     }
                 }
                 if (slotMeds.isNotEmpty()) {
-                    TimeSlotSection(label = slot.label, emoji = slot.emoji) {
+                    TimeSlotSection(label = slot.label, emoji = slot.emoji, count = slotMeds.size) {
                         slotMeds.forEach { med ->
                             val times = med.scheduleTimes.filter { t ->
                                 val h = t.split(":").getOrNull(0)?.toIntOrNull() ?: 0
                                 val mapped = if (h < 6) h + 24 else h
                                 mapped in slot.range
                             }
-                            Spacer(Modifier.height(6.dp))
                             ScheduledMedicineCard(medication = med, times = times)
                         }
                     }
@@ -316,16 +342,28 @@ private fun DayMedicationView(
 }
 
 @Composable
-private fun TimeSlotSection(label: String, emoji: String, content: @Composable ColumnScope.() -> Unit) {
-    Column {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 4.dp)) {
-            Text(emoji, fontSize = 16.sp)
-            Spacer(Modifier.width(6.dp))
-            Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color(0xFF37474F))
-            Spacer(Modifier.width(8.dp))
-            HorizontalDivider(modifier = Modifier.weight(1f), color = Color(0xFFCFD8DC))
+private fun TimeSlotSection(label: String, emoji: String, count: Int, content: @Composable ColumnScope.() -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
+            colors = CardDefaults.cardColors(containerColor = if (expanded) MedGreen.copy(alpha = 0.08f) else Color.White),
+            shape = RoundedCornerShape(14.dp),
+            elevation = CardDefaults.cardElevation(if (expanded) 0.dp else 2.dp)
+        ) {
+            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(emoji, fontSize = 22.sp)
+                Spacer(Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color(0xFF263238))
+                    Text("$count மருந்து ($count medicine${if (count > 1) "s" else ""})", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
+                Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = MedGreen)
+            }
         }
-        content()
+        if (expanded) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) { content() }
+        }
     }
 }
 
