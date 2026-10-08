@@ -152,7 +152,7 @@ class SeniorViewModel(app: Application) : AndroidViewModel(app) {
             medRepo.confirmDose(record, mood)
                 .onSuccess {
                     _state.value = _state.value.copy(
-                        successMessage = "✅ ${record.medicationName} marked as taken!"
+                        successMessage = "✅ ${record.medicationName} எடுத்துவிட்டீர்கள்! (Taken)"
                     )
                     onUserInteraction()
                     cancelVerificationAlarm(record.medicationName)
@@ -278,6 +278,16 @@ class SeniorViewModel(app: Application) : AndroidViewModel(app) {
     fun seedDemoMedications() {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch { medRepo.seedDemoData(uid) }
+    }
+
+    fun resetAndReseed() {
+        val uid = authRepo.currentUserId ?: return
+        _state.value = _state.value.copy(isLoading = true)
+        autoSeeded = false
+        viewModelScope.launch {
+            medRepo.seedDemoData(uid)
+            _state.value = _state.value.copy(successMessage = "✅ Medicines reset!")
+        }
     }
 
     fun onMedicineStripPicked(pickedMedicationId: String) {

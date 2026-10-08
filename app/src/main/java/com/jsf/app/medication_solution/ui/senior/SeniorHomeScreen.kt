@@ -118,6 +118,9 @@ fun SeniorHomeScreen(
                         Text(state.textSizePref.label, color = Color.White,
                             fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
                     }
+                    TextButton(onClick = { viewModel.resetAndReseed() }) {
+                        Text("↺", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    }
                     IconButton(onClick = onVoiceAssistant) {
                         Icon(Icons.Default.Mic, "Voice", tint = Color.White)
                     }
@@ -129,16 +132,11 @@ fun SeniorHomeScreen(
             )
         },
         floatingActionButton = {
-            if (state.medications.isEmpty()) {
-                ExtendedFloatingActionButton(
-                    onClick = { viewModel.seedDemoMedications() },
-                    icon = { Icon(Icons.Default.Add, null) },
-                    text = { Text("மருந்துகள் ஏற்று") },
-                    containerColor = MedGreen, contentColor = Color.White
-                )
-            } else {
-                FloatingActionButton(
-                    onClick = {
+            ExtendedFloatingActionButton(
+                onClick = {
+                    if (state.medications.isEmpty()) {
+                        viewModel.resetAndReseed()
+                    } else {
                         speechLauncher.launch(
                             Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -146,14 +144,19 @@ fun SeniorHomeScreen(
                                 putExtra(RecognizerIntent.EXTRA_PROMPT, "மருந்து பெயர் சொல்லுங்கள்")
                             }
                         )
-                    },
-                    containerColor = MedGreen,
-                    modifier = Modifier.size((64 * ts.coerceIn(1f, 1.4f)).dp)
-                ) {
-                    Icon(Icons.Default.Mic, "Voice confirm", tint = Color.White,
-                        modifier = Modifier.size((30 * ts.coerceIn(1f, 1.4f)).dp))
-                }
-            }
+                    }
+                },
+                icon = { Icon(Icons.Default.Mic, null, tint = Color.White) },
+                text = {
+                    Text(
+                        if (state.medications.isEmpty()) "மருந்துகள் ஏற்று" else "🎙️ குரலில் உறுதி செய்",
+                        color = Color.White, fontWeight = FontWeight.Bold,
+                        fontSize = (14 * ts.coerceIn(1f, 1.3f)).sp
+                    )
+                },
+                containerColor = MedGreen,
+                modifier = Modifier.height((56 * ts.coerceIn(1f, 1.3f)).dp)
+            )
         }
     ) { padding ->
         if (state.isLoading) {
@@ -292,8 +295,7 @@ fun SeniorHomeScreen(
                         ts = ts,
                         onConfirm = { dose ->
                             viewModel.onUserInteraction()
-                            onMedicationClick(dose,
-                                state.medications.find { it.id == dose.medicationId } ?: return@DayMedicationView)
+                            viewModel.confirmDose(dose, null)
                         }
                     )
                 }

@@ -1,6 +1,7 @@
 package com.jsf.app.medication_solution.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +58,17 @@ fun AppNavigation(authViewModel: AuthViewModel = viewModel()) {
     // Shared state for passing medication/dose between screens within senior flow
     var currentDose by remember { mutableStateOf<DoseRecord?>(null) }
     var currentMed by remember { mutableStateOf<Medication?>(null) }
+
+    // When user data loads async (already logged in), navigate to correct screen
+    LaunchedEffect(authState.isLoggedIn, authState.user) {
+        val user = authState.user ?: return@LaunchedEffect
+        if (!authState.isLoggedIn) return@LaunchedEffect
+        val dest = if (user.userRole() == UserRole.SENIOR) Routes.SENIOR_HOME else Routes.CAREGIVER_DASHBOARD
+        val current = navController.currentBackStackEntry?.destination?.route
+        if (current == Routes.ROLE_SELECTION || current == null) {
+            navController.navigate(dest) { popUpTo(0) { inclusive = true } }
+        }
+    }
 
     NavHost(navController = navController, startDestination = startDest) {
 

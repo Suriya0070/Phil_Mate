@@ -191,6 +191,14 @@ class MedicationRepository {
     }
 
     suspend fun seedDemoData(seniorId: String) {
+        // Delete all existing medications and dose records for this senior first
+        val existingMeds = db.collection("medications")
+            .whereEqualTo("seniorId", seniorId).get().await()
+        for (doc in existingMeds.documents) doc.reference.delete().await()
+        val existingDoses = db.collection("doseRecords")
+            .whereEqualTo("seniorId", seniorId).get().await()
+        for (doc in existingDoses.documents) doc.reference.delete().await()
+
         val meds = listOf(
             // ── Morning slot (07:00–09:00) ── 4 meds
             Medication(
