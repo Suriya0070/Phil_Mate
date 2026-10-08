@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "278760370633",
+    "project_id": "medicare-hackathon",
+    "storage_bucket": "medicare-hackathon.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:278760370633:android:b6e7155126cebac7ff3818",
+        "android_client_info": {
+          "package_name": "com.jsf.app.medication_solution"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBx4TO7_46pBLZfqQHLROOn1F5wKA3GHT8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
