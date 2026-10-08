@@ -1,10 +1,10 @@
 package com.jsf.app.medication_solution.ui.senior
 
-import android.app.Activity
 import android.content.Intent
+import android.os.Bundle
+import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
+import android.speech.SpeechRecognizer
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -74,13 +74,59 @@ fun SeniorHomeScreen(
     val context = LocalContext.current
     val ts = state.textSizePref.scale
 
-    val speechLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val text = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull() ?: ""
-            if (text.isNotBlank()) viewModel.confirmDoseByVoice(text)
+    // Direct SpeechRecognizer — no dialog, no manual input needed
+    var isListening by remember { mutableStateOf(false) }
+    var partialText by remember { mutableStateOf("") }
+
+    val speechRecognizer = remember { SpeechRecognizer.createSpeechRecognizer(context) }
+
+    DisposableEffect(Unit) {
+        onDispose { speechRecognizer.destroy() }
+    }
+
+    val recognitionListener = remember {
+        object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) { isListening = true; partialText = "" }
+            override fun onBeginningOfSpeech() {}
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() {}
+            override fun onPartialResults(partial: Bundle?) {
+                val heard = partial?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull() ?: ""
+                if (heard.isNotBlank()) partialText = heard
+            }
+            override fun onResults(results: Bundle?) {
+                isListening = false
+                partialText = ""
+                val texts = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION) ?: return
+                val best = texts.firstOrNull() ?: return
+                if (best.isNotBlank()) viewModel.confirmDoseByVoice(best)
+            }
+            override fun onError(error: Int) {
+                isListening = false
+                partialText = ""
+                // On error, retry once with English fallback
+                if (error == SpeechRecognizer.ERROR_NO_MATCH || error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                    viewModel.setVoiceError("கேட்கவில்லை — மீண்டும் முயற்சி செய்யவும்")
+                }
+            }
+            override fun onEvent(eventType: Int, params: Bundle?) {}
         }
+    }
+
+    fun startListening() {
+        speechRecognizer.setRecognitionListener(recognitionListener)
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "en-IN")
+            putExtra(RecognizerIntent.EXTRA_ONLY_RETURN_LANGUAGE_PREFERENCE, false)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1000L)
+        }
+        speechRecognizer.startListening(intent)
     }
 
     LaunchedEffect(Unit) {
@@ -132,29 +178,39 @@ fun SeniorHomeScreen(
             )
         },
         floatingActionButton = {
+            val pulseAlpha by rememberInfiniteTransition(label = "pulse").animateFloat(
+                initialValue = 0.55f, targetValue = 1f,
+                animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "p"
+            )
             ExtendedFloatingActionButton(
                 onClick = {
                     if (state.medications.isEmpty()) {
                         viewModel.resetAndReseed()
+                    } else if (isListening) {
+                        speechRecognizer.stopListening()
+                        isListening = false
+                        partialText = ""
                     } else {
-                        speechLauncher.launch(
-                            Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ta-IN")
-                                putExtra(RecognizerIntent.EXTRA_PROMPT, "மருந்து பெயர் சொல்லுங்கள்")
-                            }
-                        )
+                        startListening()
                     }
                 },
-                icon = { Icon(Icons.Default.Mic, null, tint = Color.White) },
+                icon = {
+                    Icon(Icons.Default.Mic, null, tint = Color.White,
+                        modifier = if (isListening) Modifier.alpha(pulseAlpha) else Modifier)
+                },
                 text = {
                     Text(
-                        if (state.medications.isEmpty()) "மருந்துகள் ஏற்று" else "🎙️ குரலில் உறுதி செய்",
-                        color = Color.White, fontWeight = FontWeight.Bold,
-                        fontSize = (14 * ts.coerceIn(1f, 1.3f)).sp
+                        when {
+                            state.medications.isEmpty() -> "மருந்துகள் ஏற்று"
+                            isListening && partialText.isNotBlank() -> "\"$partialText\""
+                            isListening -> "கேட்கிறேன்..."
+                            else -> "🎙️ பேசுங்கள்"
+                        },
+                        color = Color.White, fontWeight = FontWeight.ExtraBold,
+                        fontSize = (15 * ts.coerceIn(1f, 1.3f)).sp
                     )
                 },
-                containerColor = MedGreen,
+                containerColor = if (isListening) Color(0xFFD32F2F) else MedGreen,
                 modifier = Modifier.height((56 * ts.coerceIn(1f, 1.3f)).dp)
             )
         }

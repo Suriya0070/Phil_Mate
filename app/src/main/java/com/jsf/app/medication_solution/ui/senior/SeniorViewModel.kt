@@ -242,37 +242,66 @@ class SeniorViewModel(app: Application) : AndroidViewModel(app) {
         _state.value = _state.value.copy(textSizePref = next)
     }
 
+    fun setVoiceError(msg: String) {
+        _state.value = _state.value.copy(successMessage = msg)
+    }
+
     fun confirmDoseByVoice(spokenText: String) {
         val lower = spokenText.lowercase().trim()
         val doses = _state.value.todayDoses
-        for (dose in doses) {
-            if (dose.isTaken() || dose.isMissed()) continue
-            val words = dose.medicationName.lowercase().split(" ", "-")
-            val nameMatch = words.any { it.length > 3 && lower.contains(it) } ||
-                lower.contains(dose.medicationName.lowercase())
-            if (nameMatch) {
+        val pending = doses.filter { !it.isTaken() && !it.isMissed() }
+
+        // Build nickname/alias map for common medicine names
+        val aliases = mapOf(
+            "dolo" to listOf("dolo", "dolor", "dolo650", "dollo", "paracetamol", "paracetomol"),
+            "pan 40" to listOf("pan", "pan40", "pantoprazole", "pantop", "acidity"),
+            "telma 40" to listOf("telma", "telmisartan", "bp", "blood pressure", "thelma"),
+            "metformin 500" to listOf("metformin", "metformine", "sugar", "diabetes", "metro"),
+            "shelcal 500" to listOf("shelcal", "calcium", "cal", "bone", "shellcal"),
+            "ulgel" to listOf("ulgel", "antacid", "gel", "stomach", "vayiru"),
+            "ecosprin 75" to listOf("ecosprin", "aspirin", "eco", "heart", "blood thinner"),
+            "atorva 10" to listOf("atorva", "atorvastatin", "cholesterol", "statin", "atora")
+        )
+
+        // Step 1: Try alias match against pending doses
+        for (dose in pending) {
+            val doseKey = dose.medicationName.lowercase()
+            val aliasSet = aliases.entries.find { (k, _) -> doseKey.contains(k) }?.value ?: emptyList()
+            val directWords = dose.medicationName.lowercase().split(" ", "-").filter { it.length >= 3 }
+            val allMatchers = (directWords + aliasSet).distinct()
+            if (allMatchers.any { lower.contains(it) }) {
                 viewModelScope.launch {
                     medRepo.confirmDose(dose, null)
                     _state.value = _state.value.copy(
-                        successMessage = "✅ ${dose.medicationName} எடுத்துவிட்டீர்கள்! (Marked as taken!)"
+                        successMessage = "✅ ${dose.medicationName} எடுத்துவிட்டீர்கள்!"
                     )
+                    cancelVerificationAlarm(dose.medicationName)
                 }
                 return
             }
         }
-        val tookPatterns = listOf("potuten", "potutten", "took", "taken", "eduthen", "eduten",
-            "saptuten", "போட்டுட்டேன்", "எடுத்துட்டேன்")
-        if (tookPatterns.any { lower.contains(it) }) {
-            val pending = doses.filter { !it.isTaken() && !it.isMissed() }
-            if (pending.size == 1) {
-                viewModelScope.launch {
-                    medRepo.confirmDose(pending.first(), null)
-                    _state.value = _state.value.copy(
-                        successMessage = "✅ ${pending.first().medicationName} எடுத்துவிட்டீர்கள்!"
-                    )
-                }
+
+        // Step 2: If only one pending dose left, "took / eduthen / potuten" keywords confirm it
+        val tookKeywords = listOf(
+            "took", "taken", "done", "yes", "ok", "okay",
+            "potuten", "potutten", "eduthen", "eduten", "saptuten",
+            "போட்டேன்", "எடுத்தேன்", "போட்டுட்டேன்", "எடுத்துட்டேன்"
+        )
+        if (tookKeywords.any { lower.contains(it) } && pending.size == 1) {
+            viewModelScope.launch {
+                medRepo.confirmDose(pending.first(), null)
+                _state.value = _state.value.copy(
+                    successMessage = "✅ ${pending.first().medicationName} எடுத்துவிட்டீர்கள்!"
+                )
+                cancelVerificationAlarm(pending.first().medicationName)
             }
+            return
         }
+
+        // Step 3: Nothing matched — show what was heard
+        _state.value = _state.value.copy(
+            successMessage = "\"$spokenText\" — மருந்து பெயர் சொல்லுங்கள்"
+        )
     }
 
     fun seedDemoMedications() {
