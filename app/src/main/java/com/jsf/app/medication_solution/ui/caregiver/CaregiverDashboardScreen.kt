@@ -1,14 +1,17 @@
 package com.jsf.app.medication_solution.ui.caregiver
 
+import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -25,8 +28,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.app.NotificationCompat
+import com.jsf.app.medication_solution.MedApp
 import com.jsf.app.medication_solution.data.model.DoseRecord
 import com.jsf.app.medication_solution.data.model.Medication
+import com.jsf.app.medication_solution.data.repository.DayAdherence
 import com.jsf.app.medication_solution.service.VoiceAlarmManager
 import com.jsf.app.medication_solution.ui.theme.CareBlue
 import com.jsf.app.medication_solution.ui.theme.MedGreen
@@ -65,6 +71,13 @@ fun CaregiverDashboardScreen(
         val sid = state.seniorSnapshot?.user?.id ?: return@LaunchedEffect
         alarmSaved = VoiceAlarmManager.isAlarmVoiceSaved(context, sid)
         noteSaved  = VoiceAlarmManager.isFamilyNoteSaved(context, sid)
+    }
+
+    // Push notification to caregiver when a new missed dose is detected
+    LaunchedEffect(state.newMissedAlert) {
+        val alert = state.newMissedAlert ?: return@LaunchedEffect
+        showMissedDoseNotification(context, alert.medicationName)
+        viewModel.clearNewMissedAlert()
     }
     state.linkSuccess?.let { msg ->
         LaunchedEffect(msg) { kotlinx.coroutines.delay(3000); viewModel.clearLinkSuccess() }
@@ -110,6 +123,14 @@ fun CaregiverDashboardScreen(
             onDismiss = viewModel::hideFamilyNoteRecorder
         )
     }
+    if (state.showAddMedDialog) {
+        AddMedicineDialog(
+            onAdd = { name, purpose, dosage, times ->
+                viewModel.addMedication(name, dosage, purpose, times, "", "💊", "#4CAF50")
+            },
+            onDismiss = viewModel::hideAddMedDialog
+        )
+    }
     if (state.showEmergencyDialog) {
         EmergencyDialog(
             name = state.emergencyContact, phone = state.emergencyContactPhone,
@@ -137,6 +158,14 @@ fun CaregiverDashboardScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = TopBar)
             )
+        },
+        floatingActionButton = {
+            if (state.seniorSnapshot != null) {
+                FloatingActionButton(
+                    onClick = viewModel::showAddMedDialog,
+                    containerColor = CareBlue
+                ) { Icon(Icons.Default.Add, "Add Medicine", tint = Color.White) }
+            }
         },
         containerColor = BgPage
     ) { padding ->
@@ -220,17 +249,56 @@ fun CaregiverDashboardScreen(
                 val missed  = snap.todayDoses.count { it.isMissed() || it.isOverdue() }
                 val pending = snap.todayDoses.size - taken - missed
                 val total   = snap.todayDoses.size
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    KpiCard(Modifier.weight(1f), "$taken",  "Taken",   MedGreen,           Color(0xFFE8F5E9))
-                    KpiCard(Modifier.weight(1f), "$pending","Pending", Color(0xFFE65100),  Color(0xFFFFF3E0))
-                    KpiCard(Modifier.weight(1f), "$missed", "Missed",  StatusRed,          Color(0xFFFFEBEE))
-                    KpiCard(Modifier.weight(1f), "$total",  "Total",   CareBlue,           Color(0xFFE3F2FD))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        KpiCard(Modifier.weight(1f), "$taken",  "Taken",   MedGreen,          Color(0xFFE8F5E9))
+                        KpiCard(Modifier.weight(1f), "$pending","Pending", Color(0xFFE65100), Color(0xFFFFF3E0))
+                        KpiCard(Modifier.weight(1f), "$missed", "Missed",  StatusRed,         Color(0xFFFFEBEE))
+                        KpiCard(Modifier.weight(1f), "$total",  "Total",   CareBlue,          Color(0xFFE3F2FD))
+                    }
+                    if (state.streak > 0) {
+                        Surface(color = Color(0xFFFFF8E1), shape = RoundedCornerShape(10.dp)) {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Text("🔥", fontSize = 20.sp)
+                                Spacer(Modifier.width(8.dp))
+                                Text("${state.streak}-day adherence streak!",
+                                    fontWeight = FontWeight.SemiBold, fontSize = 13.sp,
+                                    color = Color(0xFFE65100), modifier = Modifier.weight(1f))
+                                Text("Keep it up!", fontSize = 11.sp, color = TextSub)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Refill alerts ─────────────────────────────────────────────
+            val lowPillMeds = state.medications.filter { it.remainingPills in 1..5 }
+            if (lowPillMeds.isNotEmpty()) {
+                item {
+                    Surface(color = Color(0xFFFFF3E0), shape = RoundedCornerShape(10.dp)) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text("💊 Refill Needed", fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp, color = Color(0xFFE65100))
+                            Spacer(Modifier.height(4.dp))
+                            lowPillMeds.forEach { med ->
+                                Text("• ${med.name} — only ${med.remainingPills} pill${if (med.remainingPills == 1) "" else "s"} left",
+                                    fontSize = 12.sp, color = TextHead)
+                            }
+                        }
+                    }
                 }
             }
 
             // ── Medicine status table ─────────────────────────────────────
             item { SectionLabel("Today's Medicines") }
             item { MedicineTable(snap.todayDoses, state.medications) }
+
+            // ── Weekly adherence chart ────────────────────────────────────
+            if (state.weeklyChart.isNotEmpty()) {
+                item { SectionLabel("7-Day Adherence") }
+                item { WeeklyAdherenceChart(state.weeklyChart) }
+            }
 
             // ── Action row ───────────────────────────────────────────────
             item {
@@ -476,4 +544,115 @@ private fun levelToColor(level: SeniorStatusLevel): Color = when (level) {
     SeniorStatusLevel.GREEN -> Color(0xFF4CAF50)
     SeniorStatusLevel.AMBER -> Color(0xFFFFA726)
     SeniorStatusLevel.RED   -> Color(0xFFF44336)
+}
+
+// ─── Weekly Adherence Bar Chart ───────────────────────────────────────────────
+
+@Composable
+private fun WeeklyAdherenceChart(data: List<DayAdherence>) {
+    Surface(color = BgCard, shape = RoundedCornerShape(12.dp),
+        shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            Row(
+                Modifier.fillMaxWidth().height(80.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.Bottom
+            ) {
+                data.forEach { day ->
+                    val pct = if (day.total == 0) 0f else day.taken.toFloat() / day.total.toFloat()
+                    val barColor = when {
+                        day.total == 0 -> Color(0xFFEEEEEE)
+                        pct >= 1f      -> MedGreen
+                        pct >= 0.5f    -> Color(0xFFFFA726)
+                        else           -> StatusRed
+                    }
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom
+                    ) {
+                        val barH = ((pct * 56).toInt().coerceAtLeast(if (day.total > 0) 4 else 2)).dp
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(barH)
+                                .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
+                                .background(barColor)
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(day.dayLabel, fontSize = 9.sp, color = TextSub)
+                        Text(
+                            if (day.total > 0) "${(pct * 100).toInt()}%" else "–",
+                            fontSize = 8.sp, color = TextSub
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Add Medicine Dialog ──────────────────────────────────────────────────────
+
+@Composable
+private fun AddMedicineDialog(
+    onAdd: (name: String, purpose: String, dosage: String, times: List<String>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var name    by remember { mutableStateOf("") }
+    var purpose by remember { mutableStateOf("") }
+    var dosage  by remember { mutableStateOf("1 tab") }
+    val slots   = remember { mutableStateMapOf("07:00" to false, "13:00" to false, "18:00" to false, "21:00" to false) }
+    val slotLabels = linkedMapOf("07:00" to "🌅 Morning", "13:00" to "☀️ Afternoon", "18:00" to "🌆 Evening", "21:00" to "🌙 Night")
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add Medicine", fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(name, { name = it }, label = { Text("Medicine Name", fontSize = 13.sp) },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(purpose, { purpose = it }, label = { Text("Purpose / Condition", fontSize = 13.sp) },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(dosage, { dosage = it }, label = { Text("Dosage (e.g. 1 tab)", fontSize = 13.sp) },
+                    modifier = Modifier.fillMaxWidth(), singleLine = true)
+                Text("Schedule:", fontSize = 13.sp, color = TextSub, fontWeight = FontWeight.Medium)
+                slotLabels.forEach { (time, label) ->
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Checkbox(
+                            checked = slots[time] == true,
+                            onCheckedChange = { slots[time] = it }
+                        )
+                        Text(label, fontSize = 13.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val times = slots.filterValues { it }.keys.sorted()
+                    if (name.isNotBlank() && times.isNotEmpty())
+                        onAdd(name.trim(), purpose.trim(), dosage.trim(), times.toList())
+                },
+                enabled = name.isNotBlank() && slots.any { it.value },
+                colors = ButtonDefaults.buttonColors(containerColor = CareBlue)
+            ) { Text("Add", color = Color.White, fontWeight = FontWeight.SemiBold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+// ─── Notification helper ──────────────────────────────────────────────────────
+
+private fun showMissedDoseNotification(context: Context, medName: String) {
+    val nm = context.getSystemService(NotificationManager::class.java)
+    val notification = NotificationCompat.Builder(context, MedApp.CHANNEL_ALERT)
+        .setSmallIcon(android.R.drawable.ic_dialog_alert)
+        .setContentTitle("⚠️ Missed Dose Alert")
+        .setContentText("$medName was not taken on time!")
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setAutoCancel(true)
+        .build()
+    nm.notify(medName.hashCode() + 9000, notification)
 }

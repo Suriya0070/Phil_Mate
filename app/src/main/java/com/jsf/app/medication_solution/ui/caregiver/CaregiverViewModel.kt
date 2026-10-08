@@ -12,6 +12,7 @@ import com.jsf.app.medication_solution.data.model.MoodRecord
 import com.jsf.app.medication_solution.data.model.User
 import com.jsf.app.medication_solution.data.repository.AuthRepository
 import com.jsf.app.medication_solution.data.repository.CaregiverRepository
+import com.jsf.app.medication_solution.data.repository.DayAdherence
 import com.jsf.app.medication_solution.service.AlarmScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.tasks.await
@@ -58,12 +59,15 @@ data class CaregiverUiState(
     val showVoiceAlarmRecorder: Boolean = false,
     val showFamilyNoteRecorder: Boolean = false,
     val showEmergencyDialog: Boolean = false,
-    val streak: Int = 0
+    val streak: Int = 0,
+    val weeklyChart: List<DayAdherence> = emptyList(),
+    val newMissedAlert: Alert? = null
 )
 
 class CaregiverViewModel : ViewModel() {
     private val authRepo = AuthRepository()
     private val caregiverRepo = CaregiverRepository()
+    private val seenAlertIds = mutableSetOf<String>()
 
     private val _state = MutableStateFlow(CaregiverUiState())
     val state: StateFlow<CaregiverUiState> = _state.asStateFlow()
@@ -135,8 +139,18 @@ class CaregiverViewModel : ViewModel() {
 
         viewModelScope.launch {
             caregiverRepo.observeAlerts(seniorId).collect { alerts ->
-                _state.value = _state.value.copy(alerts = alerts)
+                val isFirstLoad = seenAlertIds.isEmpty()
+                val newMissed = if (!isFirstLoad)
+                    alerts.firstOrNull { it.type == "MISSED_DOSE" && !it.isResolved && it.id !in seenAlertIds }
+                else null
+                seenAlertIds.addAll(alerts.map { it.id })
+                _state.value = _state.value.copy(alerts = alerts, newMissedAlert = newMissed)
             }
+        }
+
+        viewModelScope.launch {
+            val chart = caregiverRepo.getWeeklyAdherenceByDay(seniorId)
+            _state.value = _state.value.copy(weeklyChart = chart)
         }
 
         viewModelScope.launch {
@@ -276,6 +290,7 @@ class CaregiverViewModel : ViewModel() {
         _state.value = _state.value.copy(linkSuccess = "Alarms scheduled for ${meds.size} medication(s)!")
     }
 
+    fun clearNewMissedAlert() { _state.value = _state.value.copy(newMissedAlert = null) }
     fun clearError() { _state.value = _state.value.copy(error = null) }
     fun clearLinkSuccess() { _state.value = _state.value.copy(linkSuccess = null) }
 

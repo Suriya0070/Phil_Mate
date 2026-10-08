@@ -197,6 +197,25 @@ class MedicationRepository {
         }
     }
 
+    suspend fun calculateAdherenceStreak(seniorId: String): Int = runCatching {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        var streak = 0
+        val cal = Calendar.getInstance()
+        for (i in 0..29) {
+            val dateStr = fmt.format(cal.time)
+            val snap = db.collection("doseRecords")
+                .whereEqualTo("seniorId", seniorId)
+                .whereEqualTo("date", dateStr)
+                .get().await()
+            val doses = snap.documents.mapNotNull { it.toObject(DoseRecord::class.java) }
+            if (doses.isEmpty()) { cal.add(Calendar.DAY_OF_YEAR, -1); continue }
+            if (!doses.all { it.doseStatus() == DoseStatus.TAKEN }) break
+            streak++
+            cal.add(Calendar.DAY_OF_YEAR, -1)
+        }
+        streak
+    }.getOrDefault(0)
+
     suspend fun addMedication(medication: Medication): Result<String> = runCatching {
         val ref = db.collection("medications").document()
         ref.set(medication.copy(id = ref.id)).await()

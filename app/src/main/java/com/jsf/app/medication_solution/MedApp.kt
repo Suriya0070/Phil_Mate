@@ -4,11 +4,15 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreSettings
 
 class MedApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        FirebaseFirestore.getInstance().firestoreSettings =
+            FirebaseFirestoreSettings.Builder().setPersistenceEnabled(true).build()
         createNotificationChannels()
     }
 

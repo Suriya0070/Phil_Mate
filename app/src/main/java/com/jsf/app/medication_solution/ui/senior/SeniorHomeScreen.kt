@@ -1,6 +1,7 @@
 package com.jsf.app.medication_solution.ui.senior
 
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -48,6 +49,7 @@ import coil.compose.AsyncImage
 import com.jsf.app.medication_solution.data.model.DoseRecord
 import com.jsf.app.medication_solution.data.model.DoseStatus
 import com.jsf.app.medication_solution.data.model.Medication
+import com.jsf.app.medication_solution.service.TtsHelper
 import com.jsf.app.medication_solution.ui.theme.CareBlue
 import com.jsf.app.medication_solution.ui.theme.MedGreen
 import com.jsf.app.medication_solution.ui.theme.MedPalette
@@ -227,8 +229,11 @@ fun SeniorHomeScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Hero card with greeting + circular progress
-            item { SeniorHeroCard(taken = taken, total = total, user = state.user?.name ?: "", ts = ts) }
+            // Hero card with greeting + circular progress + streak
+            item { SeniorHeroCard(taken = taken, total = total, user = state.user?.name ?: "", ts = ts, streak = state.adherenceStreak) }
+
+            // SOS Emergency button
+            item { SosButton(context = context, onNoPhone = { viewModel.setVoiceError("SOS: Emergency number இல்லை. Caregiver-ஐ கேளுங்கள்.") }) }
 
             // Success banner
             item {
@@ -365,7 +370,7 @@ fun SeniorHomeScreen(
 // ─── Hero Card ────────────────────────────────────────────────────────────────
 
 @Composable
-private fun SeniorHeroCard(taken: Int, total: Int, user: String, ts: Float) {
+private fun SeniorHeroCard(taken: Int, total: Int, user: String, ts: Float, streak: Int = 0) {
     val progress = if (total == 0) 0f else taken.toFloat() / total.toFloat()
     val h = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
     val greeting = when (h) {
@@ -402,6 +407,15 @@ private fun SeniorHeroCard(taken: Int, total: Int, user: String, ts: Float) {
                     }
                 }
             }
+            if (streak > 0) {
+                Spacer(Modifier.height(8.dp))
+                Surface(shape = RoundedCornerShape(20.dp), color = Color.White.copy(alpha = 0.18f)) {
+                    Text("🔥 $streak நாள் தொடர்ச்சி! (day streak)",
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp),
+                        color = Color.White, fontWeight = FontWeight.Bold,
+                        fontSize = (13 * ts).sp)
+                }
+            }
             Spacer(Modifier.height(14.dp))
             when {
                 total == 0 -> Text("இன்று மருந்துகள் இல்லை 😊",
@@ -421,6 +435,39 @@ private fun SeniorHeroCard(taken: Int, total: Int, user: String, ts: Float) {
                 }
             }
         }
+    }
+}
+
+// ─── SOS Button ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun SosButton(context: android.content.Context, onNoPhone: () -> Unit) {
+    val phone = remember {
+        context.getSharedPreferences("medicare_prefs", android.content.Context.MODE_PRIVATE)
+            .getString("family_phone", "") ?: ""
+    }
+    Button(
+        onClick = {
+            if (phone.isNotBlank()) {
+                runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone"))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    )
+                }
+            } else {
+                onNoPhone()
+            }
+        },
+        modifier = Modifier.fillMaxWidth().height(58.dp),
+        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
+        shape = RoundedCornerShape(18.dp),
+        elevation = ButtonDefaults.buttonElevation(defaultElevation = 6.dp)
+    ) {
+        Text("🚨", fontSize = 24.sp)
+        Spacer(Modifier.width(10.dp))
+        Text("SOS — உடனடி அழைப்பு",
+            fontWeight = FontWeight.ExtraBold, fontSize = 18.sp, color = Color.White)
     }
 }
 
@@ -689,6 +736,7 @@ private fun MedicineTile(
     modifier: Modifier = Modifier,
     onConfirm: () -> Unit
 ) {
+    val context  = LocalContext.current
     val medColor = MedPalette.colorForMedication(medication?.pillColorHex ?: "#4CAF50", medication?.colorIndex ?: -1)
     val textColor = MedPalette.contrastTextColor(medColor)
     val isTaken = dose.isTaken()
@@ -747,7 +795,10 @@ private fun MedicineTile(
 
             if (!isTaken && !isMissed) {
                 Button(
-                    onClick = onConfirm,
+                    onClick = {
+                        TtsHelper.speak(context, "${dose.medicationName} எடுத்துவிட்டீர்கள்!")
+                        onConfirm()
+                    },
                     modifier = Modifier.fillMaxWidth().height((52 * ts.coerceIn(1f, 1.3f)).dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.28f)),
                     shape = RoundedCornerShape(14.dp),

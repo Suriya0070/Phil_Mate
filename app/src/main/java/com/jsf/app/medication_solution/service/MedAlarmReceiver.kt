@@ -15,8 +15,8 @@ import com.jsf.app.medication_solution.MedApp
 class MedAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        val medName = intent.getStringExtra("medName") ?: return
-        val seniorId = intent.getStringExtra("seniorId") ?: return
+        val medName    = intent.getStringExtra("medName")    ?: return
+        val seniorId   = intent.getStringExtra("seniorId")   ?: return
         val triggerType = intent.getStringExtra("triggerType") ?: "MEDICATION"
 
         AutoStartManager.pendingTrigger = AutoStartManager.AlarmTrigger(
@@ -26,6 +26,7 @@ class MedAlarmReceiver : BroadcastReceiver() {
         showNotification(context, medName, triggerType)
 
         if (triggerType == "MEDICATION") {
+            TtsHelper.speak(context, "$medName எடுக்க வேண்டிய நேரம் வந்தது!")
             callFamilyNumber(context)
             scheduleVerificationCall(context, medName, seniorId)
         }

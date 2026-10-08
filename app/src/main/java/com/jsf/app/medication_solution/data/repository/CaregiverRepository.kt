@@ -18,6 +18,8 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+data class DayAdherence(val dayLabel: String, val taken: Int, val total: Int)
+
 class CaregiverRepository {
     private val db = FirebaseFirestore.getInstance()
     private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
@@ -169,6 +171,27 @@ class CaregiverRepository {
             }
             streak
         }.getOrDefault(0)
+    }
+
+    suspend fun getWeeklyAdherenceByDay(seniorId: String): List<DayAdherence> {
+        val fmt    = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val dayFmt = SimpleDateFormat("EEE", Locale.getDefault())
+        val result = mutableListOf<DayAdherence>()
+        val cal    = Calendar.getInstance()
+        repeat(7) { i ->
+            if (i > 0) cal.add(Calendar.DAY_OF_YEAR, -1)
+            val dateStr = fmt.format(cal.time)
+            val label   = dayFmt.format(cal.time)
+            runCatching {
+                val snap  = db.collection("doseRecords")
+                    .whereEqualTo("seniorId", seniorId)
+                    .whereEqualTo("date", dateStr)
+                    .get().await()
+                val doses = snap.documents.mapNotNull { it.toObject(DoseRecord::class.java) }
+                result.add(0, DayAdherence(label, doses.count { it.doseStatus() == DoseStatus.TAKEN }, doses.size))
+            }.onFailure { result.add(0, DayAdherence(label, 0, 0)) }
+        }
+        return result
     }
 
     suspend fun setInteractionSchedule(seniorId: String, caregiverId: String, intervalMinutes: Int) {

@@ -54,7 +54,8 @@ data class SeniorUiState(
     val boxLedStatus: LedStatus = LedStatus.NONE,
     val boxLedMessage: String = "",
     val cameraMonitoringActive: Boolean = false,
-    val intakeDetected: Boolean? = null
+    val intakeDetected: Boolean? = null,
+    val adherenceStreak: Int = 0
 )
 
 class SeniorViewModel(app: Application) : AndroidViewModel(app) {
@@ -112,6 +113,10 @@ class SeniorViewModel(app: Application) : AndroidViewModel(app) {
             authRepo.observeUser(uid).collect { user ->
                 _state.value = _state.value.copy(isMonitored = user.isMonitored)
             }
+        }
+        viewModelScope.launch {
+            val streak = medRepo.calculateAdherenceStreak(uid)
+            _state.value = _state.value.copy(adherenceStreak = streak)
         }
     }
 
