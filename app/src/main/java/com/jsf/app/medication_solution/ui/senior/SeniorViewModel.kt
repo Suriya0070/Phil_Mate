@@ -155,10 +155,24 @@ class SeniorViewModel(app: Application) : AndroidViewModel(app) {
                         successMessage = "✅ ${record.medicationName} marked as taken!"
                     )
                     onUserInteraction()
+                    cancelVerificationAlarm(record.medicationName)
                 }
                 .onFailure { e ->
                     _state.value = _state.value.copy(error = e.message)
                 }
+        }
+    }
+
+    private fun cancelVerificationAlarm(medName: String) {
+        val ctx = getApplication<android.app.Application>()
+        val verifyIntent = android.content.Intent(ctx, com.jsf.app.medication_solution.service.MedVerifyReceiver::class.java)
+        val requestCode = "$medName-verify".hashCode()
+        val pi = android.app.PendingIntent.getBroadcast(
+            ctx, requestCode, verifyIntent,
+            android.app.PendingIntent.FLAG_NO_CREATE or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        if (pi != null) {
+            (ctx.getSystemService(android.content.Context.ALARM_SERVICE) as android.app.AlarmManager).cancel(pi)
         }
     }
 
