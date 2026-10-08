@@ -4,10 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -29,28 +27,23 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.jsf.app.medication_solution.data.model.DoseRecord
 import com.jsf.app.medication_solution.data.model.Medication
-import com.jsf.app.medication_solution.data.model.MoodRecord
 import com.jsf.app.medication_solution.service.VoiceAlarmManager
 import com.jsf.app.medication_solution.ui.theme.CareBlue
 import com.jsf.app.medication_solution.ui.theme.MedGreen
 import com.jsf.app.medication_solution.ui.theme.MedPalette
-import com.jsf.app.medication_solution.ui.theme.StatusAmber
-import com.jsf.app.medication_solution.ui.theme.StatusGreen
 import com.jsf.app.medication_solution.ui.theme.StatusRed
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-// ─── Palette ─────────────────────────────────────────────────────────────────
-
-private val DarkSurface   = Color(0xFF0D1117)
-private val DarkBar       = Color(0xFF161B22)
-private val DividerColor  = Color(0xFFE8ECEF)
-private val LabelGray     = Color(0xFF6E7681)
-private val HeaderBlue    = Color(0xFF1565C0)
-
-// ─── Main Screen ─────────────────────────────────────────────────────────────
+private val BgPage   = Color(0xFFF1F3F6)
+private val BgCard   = Color.White
+private val TopBar   = Color(0xFF0D1117)
+private val Divider  = Color(0xFFE8ECEF)
+private val TextSub  = Color(0xFF6E7681)
+private val TextHead = Color(0xFF1B2333)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,14 +52,14 @@ fun CaregiverDashboardScreen(
     onViewSeniorDetail: (String) -> Unit,
     onLogout: () -> Unit
 ) {
-    val state by viewModel.state.collectAsState()
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
+    val state   by viewModel.state.collectAsState()
+    val context  = LocalContext.current
+    val scope    = rememberCoroutineScope()
 
-    var isRecordingAlarm by remember { mutableStateOf(false) }
-    var isRecordingNote  by remember { mutableStateOf(false) }
-    var alarmSaved       by remember { mutableStateOf(false) }
-    var noteSaved        by remember { mutableStateOf(false) }
+    var recordingAlarm by remember { mutableStateOf(false) }
+    var recordingNote  by remember { mutableStateOf(false) }
+    var alarmSaved     by remember { mutableStateOf(false) }
+    var noteSaved      by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.seniorSnapshot?.user?.id) {
         val sid = state.seniorSnapshot?.user?.id ?: return@LaunchedEffect
@@ -77,29 +70,22 @@ fun CaregiverDashboardScreen(
         LaunchedEffect(msg) { kotlinx.coroutines.delay(3000); viewModel.clearLinkSuccess() }
     }
 
-    // ── Dialogs ──────────────────────────────────────────────────────────────
+    // Dialogs
     if (state.linkDialogVisible) {
-        LinkSeniorDialog(
-            email = state.linkEmail, onEmailChange = viewModel::onLinkEmailChanged,
-            onLink = viewModel::linkSenior, onDismiss = viewModel::hideLinkDialog,
-            isLoading = state.isLoading
-        )
+        LinkDialog(state.linkEmail, viewModel::onLinkEmailChanged, viewModel::linkSenior, viewModel::hideLinkDialog, state.isLoading)
     }
     if (state.showVoiceAlarmRecorder) {
-        VoiceRecordDialog(
-            title = "🎙️ Record Alarm Voice",
-            hint  = "Example: \"Thatha, medicine edunga!\"",
-            isRecording = isRecordingAlarm, saved = alarmSaved,
-            onStart = { isRecordingAlarm = true; VoiceAlarmManager.startRecording(context) },
+        VoiceDialog(
+            title = "🎙️ Record Alarm Voice", hint = "E.g. \"Thatha, medicine edunga!\"",
+            recording = recordingAlarm, saved = alarmSaved,
+            onStart = { recordingAlarm = true; VoiceAlarmManager.startRecording(context) },
             onStop  = {
-                isRecordingAlarm = false
-                val file = VoiceAlarmManager.stopRecording()
-                val sid  = state.seniorSnapshot?.user?.id ?: ""
-                if (file != null && sid.isNotBlank()) {
-                    coroutineScope.launch {
-                        if (VoiceAlarmManager.uploadAlarmVoice(sid, file)) {
-                            VoiceAlarmManager.markAlarmVoiceSaved(context, sid); alarmSaved = true
-                        }
+                recordingAlarm = false
+                val f = VoiceAlarmManager.stopRecording()
+                val sid = state.seniorSnapshot?.user?.id ?: ""
+                if (f != null && sid.isNotBlank()) scope.launch {
+                    if (VoiceAlarmManager.uploadAlarmVoice(sid, f)) {
+                        VoiceAlarmManager.markAlarmVoiceSaved(context, sid); alarmSaved = true
                     }
                 }
             },
@@ -107,20 +93,17 @@ fun CaregiverDashboardScreen(
         )
     }
     if (state.showFamilyNoteRecorder) {
-        VoiceRecordDialog(
-            title = "💌 Leave a Voice Note",
-            hint  = "Example: \"Thatha, how are you today?\"",
-            isRecording = isRecordingNote, saved = noteSaved,
-            onStart = { isRecordingNote = true; VoiceAlarmManager.startRecording(context) },
+        VoiceDialog(
+            title = "💌 Leave a Voice Note", hint = "E.g. \"Thatha, how are you today?\"",
+            recording = recordingNote, saved = noteSaved,
+            onStart = { recordingNote = true; VoiceAlarmManager.startRecording(context) },
             onStop  = {
-                isRecordingNote = false
-                val file = VoiceAlarmManager.stopRecording()
-                val sid  = state.seniorSnapshot?.user?.id ?: ""
-                if (file != null && sid.isNotBlank()) {
-                    coroutineScope.launch {
-                        if (VoiceAlarmManager.uploadFamilyNote(sid, file)) {
-                            VoiceAlarmManager.markFamilyNoteSaved(context, sid); noteSaved = true
-                        }
+                recordingNote = false
+                val f = VoiceAlarmManager.stopRecording()
+                val sid = state.seniorSnapshot?.user?.id ?: ""
+                if (f != null && sid.isNotBlank()) scope.launch {
+                    if (VoiceAlarmManager.uploadFamilyNote(sid, f)) {
+                        VoiceAlarmManager.markFamilyNoteSaved(context, sid); noteSaved = true
                     }
                 }
             },
@@ -128,14 +111,12 @@ fun CaregiverDashboardScreen(
         )
     }
     if (state.showEmergencyDialog) {
-        EmergencyContactDialog(
-            contactName  = state.emergencyContact,
-            contactPhone = state.emergencyContactPhone,
-            onSave = { name, phone ->
-                // Save to SharedPreferences so MedAlarmReceiver can auto-call this number
+        EmergencyDialog(
+            name = state.emergencyContact, phone = state.emergencyContactPhone,
+            onSave = { n, p ->
                 context.getSharedPreferences("medicare_prefs", Context.MODE_PRIVATE)
-                    .edit().putString("family_phone", phone).apply()
-                viewModel.saveEmergencyContact(name, phone)
+                    .edit().putString("family_phone", p).apply()
+                viewModel.saveEmergencyContact(n, p)
             },
             onDismiss = viewModel::hideEmergencyDialog
         )
@@ -146,30 +127,22 @@ fun CaregiverDashboardScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("MediCare Dashboard",
-                            fontWeight = FontWeight.SemiBold, fontSize = 16.sp, color = Color.White,
-                            letterSpacing = 0.3.sp)
-                        Text("Caregiver View",
-                            fontSize = 11.sp, color = Color.White.copy(alpha = 0.55f))
+                        Text("MediCare", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.White)
+                        Text("Caregiver Dashboard", fontSize = 11.sp, color = Color.White.copy(alpha = 0.5f))
                     }
                 },
                 actions = {
-                    IconButton(onClick = viewModel::showLinkDialog) {
-                        Icon(Icons.Default.Add, "Link senior", tint = Color.White)
-                    }
-                    IconButton(onClick = onLogout) {
-                        Icon(Icons.Default.ExitToApp, "Logout", tint = Color.White)
-                    }
+                    IconButton(onClick = viewModel::showLinkDialog) { Icon(Icons.Default.Add, "Link", tint = Color.White) }
+                    IconButton(onClick = onLogout)                  { Icon(Icons.Default.ExitToApp, "Logout", tint = Color.White) }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = DarkBar)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = TopBar)
             )
         },
-        containerColor = Color(0xFFF4F6F9)
+        containerColor = BgPage
     ) { padding ->
+
         if (state.isLoading && state.seniorSnapshot == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = CareBlue)
-            }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = CareBlue) }
             return@Scaffold
         }
 
@@ -178,327 +151,244 @@ fun CaregiverDashboardScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Greeting
-            item {
-                Text(
-                    "Hello, ${state.caregiver?.name ?: "Caregiver"} 👋",
-                    fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = LabelGray
-                )
-            }
 
             // Success banner
-            state.linkSuccess?.let { msg ->
+            state.linkSuccess?.let {
                 item {
-                    Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(10.dp)) {
-                        Text("✅ $msg", modifier = Modifier.padding(12.dp),
-                            color = MedGreen, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                    Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(8.dp)) {
+                        Text("✅ $it", Modifier.padding(12.dp), color = MedGreen, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
 
             if (state.noSeniorLinked || state.seniorSnapshot == null) {
-                item { NoSeniorLinkedCard(onLinkClick = viewModel::showLinkDialog) }
-            } else {
-                val snap = state.seniorSnapshot!!
-
-                // Patient info bar
-                item { PatientInfoBar(snap = snap, streak = state.streak) }
-
-                // Emergency alert
-                if (snap.inactiveMinutes > 30 && state.emergencyContactPhone.isNotBlank()) {
-                    item { InactivityAlertBar(snap = snap, phone = state.emergencyContactPhone, context = context) }
-                }
-
-                // 4-KPI chips row
-                item { KpiRow(doses = snap.todayDoses) }
-
-                // Medicine STATUS TABLE
-                item { MedicineStatusTable(doses = snap.todayDoses, medications = state.medications) }
-
-                // Mood + Vitals compact row
-                item {
-                    MoodVitalsRow(
-                        mood = snap.latestMood,
-                        bp = state.vitalBP, hr = state.vitalHR, spo2 = state.vitalSpO2,
-                        onRefreshVitals = viewModel::simulateVitals
-                    )
-                }
-
-                // Quick action bar
-                item {
-                    QuickActionBar(
-                        monitoringEnabled = state.isMonitoringEnabled,
-                        onToggleMonitor = viewModel::toggleMonitoring,
-                        onVoiceNote   = viewModel::showFamilyNoteRecorder,
-                        onEmergency   = viewModel::showEmergencyDialog,
-                        onDetail      = { onViewSeniorDetail(snap.user.id) }
-                    )
-                }
+                item { NoSeniorCard(viewModel::showLinkDialog) }
+                return@LazyColumn
             }
 
-            item { Spacer(Modifier.height(80.dp)) }
-        }
-    }
-}
+            val snap = state.seniorSnapshot!!
 
-// ─── Patient Info Bar ─────────────────────────────────────────────────────────
-
-@Composable
-private fun PatientInfoBar(snap: SeniorSnapshot, streak: Int) {
-    val lastSeen = when {
-        snap.inactiveMinutes < 1  -> "Active now"
-        snap.inactiveMinutes < 60 -> "${snap.inactiveMinutes} min ago"
-        else                      -> "${snap.inactiveMinutes / 60}h ago"
-    }
-    Surface(
-        color = Color.White, shape = RoundedCornerShape(14.dp),
-        shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier.size(44.dp).clip(CircleShape)
-                    .background(levelToColor(snap.statusLevel).copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center
-            ) { Text("👴", fontSize = 22.sp) }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(snap.user.name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(lastSeen, fontSize = 12.sp,
-                        color = if (snap.inactiveMinutes > 30) Color(0xFFE65100) else LabelGray)
-                    if (streak > 0) Text("🔥 $streak days", fontSize = 12.sp, color = Color(0xFFFF6F00),
-                        fontWeight = FontWeight.SemiBold)
-                }
-            }
-            StatusPill(level = snap.statusLevel)
-        }
-    }
-}
-
-// ─── Inactivity Alert ─────────────────────────────────────────────────────────
-
-@Composable
-private fun InactivityAlertBar(snap: SeniorSnapshot, phone: String, context: Context) {
-    Surface(color = Color(0xFFFFEBEE), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("🚨", fontSize = 20.sp)
-            Spacer(Modifier.width(8.dp))
-            Text("No activity for ${snap.inactiveMinutes} min",
-                fontWeight = FontWeight.Medium, fontSize = 13.sp, color = Color(0xFFC62828),
-                modifier = Modifier.weight(1f))
-            Button(
-                onClick = {
-                    runCatching {
-                        context.startActivity(
-                            Intent(Intent.ACTION_CALL, Uri.parse("tel:$phone"))
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        )
-                    }
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                modifier = Modifier.height(32.dp)
-            ) { Text("Call", color = Color.White, fontSize = 12.sp) }
-        }
-    }
-}
-
-// ─── KPI Row ──────────────────────────────────────────────────────────────────
-
-@Composable
-private fun KpiRow(doses: List<DoseRecord>) {
-    val taken   = doses.count { it.isTaken() }
-    val missed  = doses.count { it.isMissed() || it.isOverdue() }
-    val pending = doses.size - taken - missed
-    val total   = doses.size
-
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        KpiChip(modifier = Modifier.weight(1f), value = "$taken",
-            label = "Taken", color = MedGreen, bg = Color(0xFFE8F5E9))
-        KpiChip(modifier = Modifier.weight(1f), value = "$pending",
-            label = "Pending", color = Color(0xFFE65100), bg = Color(0xFFFFF3E0))
-        KpiChip(modifier = Modifier.weight(1f), value = "$missed",
-            label = "Missed", color = StatusRed, bg = Color(0xFFFFEBEE))
-        KpiChip(modifier = Modifier.weight(1f), value = "$total",
-            label = "Total", color = HeaderBlue, bg = Color(0xFFE3F2FD))
-    }
-}
-
-@Composable
-private fun KpiChip(modifier: Modifier = Modifier, value: String, label: String, color: Color, bg: Color) {
-    Surface(modifier = modifier, color = bg, shape = RoundedCornerShape(12.dp)) {
-        Column(modifier = Modifier.padding(vertical = 12.dp, horizontal = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = color)
-            Text(label, fontSize = 11.sp, color = LabelGray, fontWeight = FontWeight.Medium)
-        }
-    }
-}
-
-// ─── Medicine Status Table ─────────────────────────────────────────────────────
-
-@Composable
-private fun MedicineStatusTable(doses: List<DoseRecord>, medications: List<Medication>) {
-    val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
-    if (doses.isEmpty()) return
-
-    Surface(color = Color.White, shape = RoundedCornerShape(14.dp),
-        shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
-        Column {
-            // Table header
-            Row(modifier = Modifier.fillMaxWidth()
-                .background(Color(0xFFF0F4FF))
-                .padding(horizontal = 16.dp, vertical = 10.dp)) {
-                Text("Medicine", modifier = Modifier.weight(1.7f),
-                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = HeaderBlue)
-                Text("Time", modifier = Modifier.weight(1f),
-                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = HeaderBlue,
-                    textAlign = TextAlign.Center)
-                Text("Status", modifier = Modifier.weight(1.3f),
-                    fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = HeaderBlue,
-                    textAlign = TextAlign.End)
-            }
-
-            doses.forEachIndexed { index, dose ->
-                val med = medications.find { it.id == dose.medicationId }
-                val medColor = MedPalette.colorForMedication(
-                    med?.pillColorHex ?: "#4CAF50", med?.colorIndex ?: -1
-                )
-                val (statusText, statusColor, statusBg) = when {
-                    dose.isTaken() -> Triple("Taken ✅", MedGreen, Color(0xFFE8F5E9))
-                    dose.isMissed() || dose.isOverdue() -> Triple("Missed ✗", StatusRed, Color(0xFFFFEBEE))
-                    else -> Triple("Pending ◷", Color(0xFFE65100), Color(0xFFFFF8F0))
-                }
-
-                Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Row(modifier = Modifier.weight(1.7f), verticalAlignment = Alignment.CenterVertically) {
-                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(medColor))
+            // ── Patient header row ────────────────────────────────────────
+            item {
+                Surface(color = BgCard, shape = RoundedCornerShape(12.dp), shadowElevation = 1.dp) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(40.dp).clip(CircleShape)
+                            .background(levelToColor(snap.statusLevel).copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center) { Text("👴", fontSize = 20.sp) }
+                        Spacer(Modifier.width(12.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(snap.user.name, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextHead)
+                            val lastSeen = when {
+                                snap.inactiveMinutes < 1  -> "Active now"
+                                snap.inactiveMinutes < 60 -> "${snap.inactiveMinutes} min ago"
+                                else                      -> "${snap.inactiveMinutes / 60}h ago"
+                            }
+                            Text(lastSeen, fontSize = 12.sp, color = if (snap.inactiveMinutes > 30) Color(0xFFE65100) else TextSub)
+                        }
+                        StatusPill(snap.statusLevel)
                         Spacer(Modifier.width(8.dp))
-                        Text(dose.medicationName, fontSize = 14.sp, fontWeight = FontWeight.Medium,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                    Text(timeFmt.format(Date(dose.scheduledTime)),
-                        modifier = Modifier.weight(1f), fontSize = 13.sp, color = LabelGray,
-                        textAlign = TextAlign.Center)
-                    Box(modifier = Modifier.weight(1.3f), contentAlignment = Alignment.CenterEnd) {
-                        Surface(shape = RoundedCornerShape(20.dp), color = statusBg) {
-                            Text(statusText, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                fontSize = 11.sp, color = statusColor, fontWeight = FontWeight.SemiBold)
+                        IconButton(onClick = { onViewSeniorDetail(snap.user.id) }, modifier = Modifier.size(34.dp)) {
+                            Icon(Icons.Default.Settings, null, tint = TextSub, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
-
-                if (index < doses.lastIndex) {
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp),
-                        color = DividerColor, thickness = 0.5.dp)
-                }
             }
-        }
-    }
-}
 
-// ─── Mood + Vitals Compact Row ────────────────────────────────────────────────
-
-@Composable
-private fun MoodVitalsRow(mood: MoodRecord?, bp: String, hr: Int, spo2: Int, onRefreshVitals: () -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Surface(modifier = Modifier.weight(1f), color = Color.White,
-            shape = RoundedCornerShape(12.dp), shadowElevation = 1.dp) {
-            Column(modifier = Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Mood", fontSize = 11.sp, color = LabelGray, fontWeight = FontWeight.SemiBold)
-                Spacer(Modifier.height(4.dp))
-                if (mood != null) {
-                    Text(mood.moodLevel().emoji, fontSize = 28.sp)
-                    Text(mood.moodLevel().label, fontSize = 11.sp, color = Color(0xFF880E4F))
-                } else {
-                    Text("😐", fontSize = 28.sp)
-                    Text("Unknown", fontSize = 11.sp, color = LabelGray)
-                }
-            }
-        }
-        Surface(modifier = Modifier.weight(1.6f), color = Color.White,
-            shape = RoundedCornerShape(12.dp), shadowElevation = 1.dp) {
-            Column(modifier = Modifier.padding(12.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Vitals", fontSize = 11.sp, color = LabelGray,
-                        fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    IconButton(onClick = onRefreshVitals, modifier = Modifier.size(20.dp)) {
-                        Icon(Icons.Default.Refresh, null, tint = LabelGray, modifier = Modifier.size(14.dp))
+            // ── Inactivity alert ─────────────────────────────────────────
+            if (snap.inactiveMinutes > 30 && state.emergencyContactPhone.isNotBlank()) {
+                item {
+                    Surface(color = Color(0xFFFFEBEE), shape = RoundedCornerShape(10.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Text("⚠️", fontSize = 16.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("No activity for ${snap.inactiveMinutes} min",
+                                fontSize = 13.sp, color = Color(0xFFC62828), modifier = Modifier.weight(1f))
+                            TextButton(
+                                onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:${state.emergencyContactPhone}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } },
+                                colors = ButtonDefaults.textButtonColors(contentColor = StatusRed),
+                                contentPadding = PaddingValues(horizontal = 8.dp)
+                            ) { Text("Call", fontWeight = FontWeight.Bold, fontSize = 13.sp) }
+                        }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
-                VitalRow("❤️", "BP", bp, "mmHg")
-                VitalRow("💓", "HR", "$hr", "bpm")
-                VitalRow("🫁", "O₂", "$spo2", "%")
+            }
+
+            // ── KPI chips ────────────────────────────────────────────────
+            item {
+                val taken   = snap.todayDoses.count { it.isTaken() }
+                val missed  = snap.todayDoses.count { it.isMissed() || it.isOverdue() }
+                val pending = snap.todayDoses.size - taken - missed
+                val total   = snap.todayDoses.size
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KpiCard(Modifier.weight(1f), "$taken",  "Taken",   MedGreen,           Color(0xFFE8F5E9))
+                    KpiCard(Modifier.weight(1f), "$pending","Pending", Color(0xFFE65100),  Color(0xFFFFF3E0))
+                    KpiCard(Modifier.weight(1f), "$missed", "Missed",  StatusRed,          Color(0xFFFFEBEE))
+                    KpiCard(Modifier.weight(1f), "$total",  "Total",   CareBlue,           Color(0xFFE3F2FD))
+                }
+            }
+
+            // ── Medicine status table ─────────────────────────────────────
+            item { SectionLabel("Today's Medicines") }
+            item { MedicineTable(snap.todayDoses, state.medications) }
+
+            // ── Action row ───────────────────────────────────────────────
+            item {
+                Surface(color = BgCard, shape = RoundedCornerShape(12.dp), shadowElevation = 1.dp) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp)) {
+                        ActionChip(Modifier.weight(1f), "💌 Voice Note",  CareBlue)  { viewModel.showFamilyNoteRecorder() }
+                        ActionChip(Modifier.weight(1f), "🎙️ Alarm Voice", TextSub)   { viewModel.showVoiceAlarmRecorder() }
+                        ActionChip(Modifier.weight(1f), "🚨 SOS Contact", StatusRed) { viewModel.showEmergencyDialog() }
+                    }
+                }
+            }
+
+            item { Spacer(Modifier.height(72.dp)) }
+        }
+    }
+}
+
+// ─── Medicine Table ───────────────────────────────────────────────────────────
+
+@Composable
+private fun MedicineTable(doses: List<DoseRecord>, medications: List<Medication>) {
+    val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    if (doses.isEmpty()) {
+        Surface(color = BgCard, shape = RoundedCornerShape(12.dp), shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+            Box(Modifier.padding(32.dp), contentAlignment = Alignment.Center) {
+                Text("No medicines scheduled today", fontSize = 13.sp, color = TextSub)
+            }
+        }
+        return
+    }
+
+    // Group doses by time slot
+    data class Slot(val label: String, val emoji: String, val range: IntRange)
+    val slots = listOf(
+        Slot("Morning",   "🌅", 6..11),
+        Slot("Afternoon", "☀️", 12..16),
+        Slot("Evening",   "🌆", 17..20),
+        Slot("Night",     "🌙", 21..29)
+    )
+
+    Surface(color = BgCard, shape = RoundedCornerShape(12.dp), shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+        Column {
+            // Header row
+            Row(Modifier.fillMaxWidth().background(Color(0xFFF0F3FF)).padding(horizontal = 16.dp, vertical = 9.dp)) {
+                Text("Medicine",   Modifier.weight(1.8f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = CareBlue)
+                Text("Time",       Modifier.weight(1f),   fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = CareBlue, textAlign = TextAlign.Center)
+                Text("Status",     Modifier.weight(1.3f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = CareBlue, textAlign = TextAlign.End)
+            }
+
+            var firstRow = true
+            for (slot in slots) {
+                val slotDoses = doses.filter { dose ->
+                    val cal = Calendar.getInstance(); cal.timeInMillis = dose.scheduledTime
+                    val h = cal.get(Calendar.HOUR_OF_DAY)
+                    (if (h < 6) h + 24 else h) in slot.range
+                }
+                if (slotDoses.isEmpty()) continue
+
+                // Slot sub-header
+                if (!firstRow) HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Divider, thickness = 0.5.dp)
+                firstRow = false
+                Row(Modifier.fillMaxWidth().background(Color(0xFFFAFBFC)).padding(horizontal = 16.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("${slot.emoji} ${slot.label}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                        color = TextSub)
+                    Spacer(Modifier.weight(1f))
+                    Text("${slotDoses.size} med${if (slotDoses.size > 1) "s" else ""}",
+                        fontSize = 11.sp, color = TextSub)
+                }
+
+                slotDoses.forEachIndexed { idx, dose ->
+                    val med = medications.find { it.id == dose.medicationId }
+                    val dotColor = MedPalette.colorForMedication(med?.pillColorHex ?: "#4CAF50", med?.colorIndex ?: -1)
+                    val (statusText, statusColor, statusBg) = when {
+                        dose.isTaken()  -> Triple("Taken ✓", MedGreen, Color(0xFFE8F5E9))
+                        dose.isMissed() || dose.isOverdue() -> Triple("Missed ✗", StatusRed, Color(0xFFFFEBEE))
+                        else -> Triple("Pending", Color(0xFFE65100), Color(0xFFFFF8F0))
+                    }
+
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = Divider, thickness = 0.5.dp)
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Row(Modifier.weight(1.8f), verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(8.dp).clip(CircleShape).background(dotColor))
+                            Spacer(Modifier.width(8.dp))
+                            Text(dose.medicationName, fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        Text(timeFmt.format(Date(dose.scheduledTime)),
+                            Modifier.weight(1f), fontSize = 12.sp, color = TextSub, textAlign = TextAlign.Center)
+                        Box(Modifier.weight(1.3f), contentAlignment = Alignment.CenterEnd) {
+                            Surface(shape = RoundedCornerShape(20.dp), color = statusBg) {
+                                Text(statusText, Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    fontSize = 11.sp, color = statusColor, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
+// ─── Small helpers ────────────────────────────────────────────────────────────
+
 @Composable
-private fun VitalRow(icon: String, label: String, value: String, unit: String) {
-    Row(modifier = Modifier.padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(icon, fontSize = 12.sp)
-        Spacer(Modifier.width(4.dp))
-        Text(label, fontSize = 11.sp, color = LabelGray, modifier = Modifier.width(22.dp))
-        Text(value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-        Text(unit, fontSize = 10.sp, color = LabelGray)
-    }
+private fun SectionLabel(text: String) {
+    Text(text, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = TextSub,
+        modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp))
 }
 
-// ─── Quick Action Bar ─────────────────────────────────────────────────────────
-
 @Composable
-private fun QuickActionBar(
-    monitoringEnabled: Boolean,
-    onToggleMonitor: () -> Unit,
-    onVoiceNote: () -> Unit,
-    onEmergency: () -> Unit,
-    onDetail: () -> Unit
-) {
-    Surface(color = Color.White, shape = RoundedCornerShape(12.dp),
-        shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            ActionBtn(
-                modifier = Modifier.weight(1f),
-                label = if (monitoringEnabled) "Monitor ON" else "Monitor",
-                icon = Icons.Default.Notifications,
-                tint = if (monitoringEnabled) MedGreen else LabelGray,
-                onClick = onToggleMonitor
-            )
-            ActionBtn(modifier = Modifier.weight(1f), label = "Voice Note",
-                icon = Icons.Default.Mic, tint = CareBlue, onClick = onVoiceNote)
-            ActionBtn(modifier = Modifier.weight(1f), label = "Emergency",
-                icon = Icons.Default.Phone, tint = StatusRed, onClick = onEmergency)
-            ActionBtn(modifier = Modifier.weight(1f), label = "Details",
-                icon = Icons.Default.Settings, tint = LabelGray, onClick = onDetail)
+private fun KpiCard(modifier: Modifier, value: String, label: String, color: Color, bg: Color) {
+    Surface(modifier = modifier, color = bg, shape = RoundedCornerShape(10.dp)) {
+        Column(Modifier.padding(vertical = 10.dp, horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(value, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = color)
+            Text(label, fontSize = 10.sp, color = TextSub, fontWeight = FontWeight.Medium)
         }
     }
 }
 
 @Composable
-private fun ActionBtn(modifier: Modifier = Modifier, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, onClick: () -> Unit) {
-    TextButton(onClick = onClick, modifier = modifier, contentPadding = PaddingValues(vertical = 8.dp)) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(20.dp))
-            Text(label, fontSize = 10.sp, color = tint, fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+private fun ActionChip(modifier: Modifier, label: String, color: Color, onClick: () -> Unit) {
+    TextButton(onClick = onClick, modifier = modifier, contentPadding = PaddingValues(vertical = 6.dp)) {
+        Text(label, fontSize = 11.sp, color = color, fontWeight = FontWeight.SemiBold,
+            textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
-
-// ─── Status Pill ──────────────────────────────────────────────────────────────
 
 @Composable
 private fun StatusPill(level: SeniorStatusLevel) {
-    val color = levelToColor(level)
-    Surface(shape = RoundedCornerShape(20.dp), color = color.copy(alpha = 0.12f)) {
-        Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(7.dp).clip(CircleShape).background(color))
-            Spacer(Modifier.width(5.dp))
-            Text(level.label, fontSize = 11.sp, color = color, fontWeight = FontWeight.SemiBold)
+    val c = levelToColor(level)
+    Surface(shape = RoundedCornerShape(20.dp), color = c.copy(alpha = 0.1f)) {
+        Row(Modifier.padding(horizontal = 9.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(6.dp).clip(CircleShape).background(c))
+            Spacer(Modifier.width(4.dp))
+            Text(level.label, fontSize = 11.sp, color = c, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun NoSeniorCard(onLink: () -> Unit) {
+    Surface(color = BgCard, shape = RoundedCornerShape(14.dp), shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("👴", fontSize = 48.sp)
+            Spacer(Modifier.height(10.dp))
+            Text("No Senior Linked", fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextHead)
+            Spacer(Modifier.height(4.dp))
+            Text("Link a family member's account to monitor their medication.", fontSize = 13.sp,
+                color = TextSub, textAlign = TextAlign.Center)
+            Spacer(Modifier.height(18.dp))
+            Button(onClick = onLink, modifier = Modifier.fillMaxWidth().height(46.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = CareBlue)) {
+                Icon(Icons.Default.Add, null, tint = Color.White)
+                Spacer(Modifier.width(6.dp))
+                Text("Link Family Member", color = Color.White, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
@@ -506,31 +396,26 @@ private fun StatusPill(level: SeniorStatusLevel) {
 // ─── Dialogs ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun VoiceRecordDialog(
-    title: String, hint: String, isRecording: Boolean, saved: Boolean,
+private fun VoiceDialog(
+    title: String, hint: String, recording: Boolean, saved: Boolean,
     onStart: () -> Unit, onStop: () -> Unit, onDismiss: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+        title = { Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
         text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Record your voice — it plays when the patient needs to hear from you.",
-                    fontSize = 13.sp, color = LabelGray)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Plays for the patient when needed.", fontSize = 12.sp, color = TextSub)
                 Text(hint, fontSize = 12.sp, color = CareBlue, fontStyle = FontStyle.Italic)
-                if (saved) Text("✅ Voice saved!", color = MedGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                Button(
-                    onClick = if (isRecording) onStop else onStart,
-                    colors = ButtonDefaults.buttonColors(containerColor = if (isRecording) StatusRed else CareBlue),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(if (isRecording) Icons.Default.Close else Icons.Default.Mic, null, tint = Color.White)
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (isRecording) "Stop & Save" else "Start Recording",
-                        color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                if (saved) Text("✅ Saved!", color = MedGreen, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Button(onClick = if (recording) onStop else onStart,
+                    colors = ButtonDefaults.buttonColors(containerColor = if (recording) StatusRed else CareBlue),
+                    modifier = Modifier.fillMaxWidth()) {
+                    Icon(if (recording) Icons.Default.Close else Icons.Default.Mic, null, tint = Color.White)
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (recording) "Stop & Save" else "Start Recording", color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
-                if (isRecording) Text("● Recording...", color = StatusRed, fontSize = 13.sp)
+                if (recording) Text("● Recording...", color = StatusRed, fontSize = 12.sp)
             }
         },
         confirmButton = {},
@@ -539,32 +424,22 @@ private fun VoiceRecordDialog(
 }
 
 @Composable
-private fun EmergencyContactDialog(
-    contactName: String, contactPhone: String,
-    onSave: (String, String) -> Unit, onDismiss: () -> Unit
-) {
-    var name  by remember { mutableStateOf(contactName) }
-    var phone by remember { mutableStateOf(contactPhone) }
+private fun EmergencyDialog(name: String, phone: String, onSave: (String, String) -> Unit, onDismiss: () -> Unit) {
+    var n by remember { mutableStateOf(name) }
+    var p by remember { mutableStateOf(phone) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Emergency Contact", fontWeight = FontWeight.SemiBold, fontSize = 16.sp) },
+        title = { Text("Emergency Contact", fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("If the patient is inactive for 30+ minutes, this number will be called automatically.",
-                    fontSize = 12.sp, color = LabelGray)
-                OutlinedTextField(value = name, onValueChange = { name = it },
-                    label = { Text("Contact Name", fontSize = 13.sp) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = phone, onValueChange = { phone = it },
-                    label = { Text("Phone Number", fontSize = 13.sp) },
-                    modifier = Modifier.fillMaxWidth(), singleLine = true,
+                Text("Called automatically if patient is inactive for 30+ min.", fontSize = 12.sp, color = TextSub)
+                OutlinedTextField(n, { n = it }, label = { Text("Name", fontSize = 13.sp) }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(p, { p = it }, label = { Text("Phone", fontSize = 13.sp) }, modifier = Modifier.fillMaxWidth(), singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(name, phone) },
-                colors = ButtonDefaults.buttonColors(containerColor = CareBlue),
-                enabled = phone.isNotBlank()) {
+            Button(onClick = { onSave(n, p) }, colors = ButtonDefaults.buttonColors(containerColor = CareBlue), enabled = p.isNotBlank()) {
                 Text("Save", color = Color.White, fontWeight = FontWeight.SemiBold)
             }
         },
@@ -573,50 +448,24 @@ private fun EmergencyContactDialog(
 }
 
 @Composable
-private fun NoSeniorLinkedCard(onLinkClick: () -> Unit) {
-    Surface(color = Color.White, shape = RoundedCornerShape(16.dp),
-        shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("👴", fontSize = 56.sp)
-            Spacer(Modifier.height(12.dp))
-            Text("No Senior Linked", fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-            Spacer(Modifier.height(4.dp))
-            Text("Link a family member's account to start monitoring their medication schedule.",
-                fontSize = 13.sp, color = LabelGray, textAlign = TextAlign.Center)
-            Spacer(Modifier.height(20.dp))
-            Button(onClick = onLinkClick, modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = CareBlue)) {
-                Icon(Icons.Default.Add, null, tint = Color.White)
-                Spacer(Modifier.width(8.dp))
-                Text("Link Family Member", color = Color.White, fontWeight = FontWeight.SemiBold)
-            }
-        }
-    }
-}
-
-@Composable
-private fun LinkSeniorDialog(
-    email: String, onEmailChange: (String) -> Unit, onLink: () -> Unit,
-    onDismiss: () -> Unit, isLoading: Boolean
-) {
+private fun LinkDialog(email: String, onChange: (String) -> Unit, onLink: () -> Unit, onDismiss: () -> Unit, loading: Boolean) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Link Family Member", fontWeight = FontWeight.SemiBold, fontSize = 16.sp) },
+        title = { Text("Link Family Member", fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
         text = {
             Column {
-                Text("Enter the senior's account email address.", fontSize = 13.sp, color = LabelGray)
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(value = email, onValueChange = onEmailChange,
-                    label = { Text("Senior's Email", fontSize = 13.sp) },
+                Text("Enter the senior's account email.", fontSize = 12.sp, color = TextSub)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(email, onChange, label = { Text("Email", fontSize = 13.sp) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
             }
         },
         confirmButton = {
-            Button(onClick = onLink, enabled = email.isNotBlank() && !isLoading,
+            Button(onClick = onLink, enabled = email.isNotBlank() && !loading,
                 colors = ButtonDefaults.buttonColors(containerColor = CareBlue)) {
-                if (isLoading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(18.dp))
-                else Text("Link Account", color = Color.White, fontWeight = FontWeight.SemiBold)
+                if (loading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(16.dp))
+                else Text("Link", color = Color.White, fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }

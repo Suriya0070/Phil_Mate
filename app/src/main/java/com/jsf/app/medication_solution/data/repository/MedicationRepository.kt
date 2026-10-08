@@ -192,14 +192,28 @@ class MedicationRepository {
 
     suspend fun seedDemoData(seniorId: String) {
         val meds = listOf(
+            // ── Morning slot (07:00–09:00) ── 4 meds
             Medication(
                 seniorId = seniorId,
-                name = "Dolo",
+                name = "Pan 40",
+                purpose = "Acidity / Gastric (Saapida munpu)",
+                dosage = "1 tab",
+                pillColorHex = "#00ACC1",
+                pillEmoji = "💊",
+                scheduleTimes = listOf("07:00"),
+                instructions = "Saapida 30 nimisham munpu edunga",
+                remainingPills = 30,
+                shape = "capsule",
+                colorIndex = 5
+            ),
+            Medication(
+                seniorId = seniorId,
+                name = "Dolo 650",
                 purpose = "Kaichal & Vali (Fever & Pain)",
                 dosage = "1 tab",
                 pillColorHex = "#E53935",
-                pillEmoji = "🔴",
-                scheduleTimes = listOf("08:00", "20:00"),
+                pillEmoji = "💊",
+                scheduleTimes = listOf("08:00", "14:00", "20:00"),
                 instructions = "Saapida potta edunga",
                 remainingPills = 28,
                 shape = "oval",
@@ -207,42 +221,84 @@ class MedicationRepository {
             ),
             Medication(
                 seniorId = seniorId,
-                name = "Para",
-                purpose = "Thalaivaali & Kaichal (Headache & Fever)",
-                dosage = "1 tab",
-                pillColorHex = "#1E88E5",
-                pillEmoji = "🔵",
-                scheduleTimes = listOf("07:30", "13:00", "19:30"),
-                instructions = "Saapida potta edunga",
-                remainingPills = 45,
-                shape = "circle",
-                colorIndex = 1
-            ),
-            Medication(
-                seniorId = seniorId,
-                name = "BP Tab",
-                purpose = "Ratham azhuththam (Blood Pressure)",
+                name = "Telma 40",
+                purpose = "Ratham azhuththam (BP / Blood Pressure)",
                 dosage = "1 tab",
                 pillColorHex = "#43A047",
-                pillEmoji = "🟢",
-                scheduleTimes = listOf("09:00"),
-                instructions = "Kaalaiyil edunga",
+                pillEmoji = "💊",
+                scheduleTimes = listOf("08:30"),
+                instructions = "Kaalaiyil thinra potta edunga",
                 remainingPills = 20,
-                shape = "capsule",
+                shape = "circle",
                 colorIndex = 2
             ),
             Medication(
                 seniorId = seniorId,
-                name = "Sugar Tab",
+                name = "Metformin 500",
                 purpose = "Neeriziv noi (Diabetes / Sugar)",
                 dosage = "1 tab",
                 pillColorHex = "#FF8F00",
-                pillEmoji = "🟠",
-                scheduleTimes = listOf("21:00"),
-                instructions = "Iravu thoongum munpu edunga",
-                remainingPills = 14,
+                pillEmoji = "💊",
+                scheduleTimes = listOf("09:00", "21:00"),
+                instructions = "Saapida potta edunga",
+                remainingPills = 60,
                 shape = "square",
                 colorIndex = 3
+            ),
+            // ── Afternoon slot (13:00–14:00) ── 3 meds
+            Medication(
+                seniorId = seniorId,
+                name = "Shelcal 500",
+                purpose = "Elumbu vali (Calcium / Bone)",
+                dosage = "1 tab",
+                pillColorHex = "#8E24AA",
+                pillEmoji = "💊",
+                scheduleTimes = listOf("13:30"),
+                instructions = "Saapida potta edunga",
+                remainingPills = 30,
+                shape = "circle",
+                colorIndex = 4
+            ),
+            Medication(
+                seniorId = seniorId,
+                name = "Ulgel",
+                purpose = "Vayiru vali (Antacid / Acidity)",
+                dosage = "2 tsp",
+                pillColorHex = "#6D4C41",
+                pillEmoji = "💊",
+                scheduleTimes = listOf("13:00"),
+                instructions = "Saapida potta pinju kudiukkavum",
+                remainingPills = 25,
+                shape = "oval",
+                colorIndex = 7
+            ),
+            // ── Evening slot (18:00) ── 1 med
+            Medication(
+                seniorId = seniorId,
+                name = "Ecosprin 75",
+                purpose = "Neer maitha kaappu (Blood Thinner)",
+                dosage = "1 tab",
+                pillColorHex = "#1E88E5",
+                pillEmoji = "💊",
+                scheduleTimes = listOf("18:00"),
+                instructions = "Saapida potta edunga",
+                remainingPills = 30,
+                shape = "circle",
+                colorIndex = 1
+            ),
+            // ── Night slot (21:00) ── 2 meds
+            Medication(
+                seniorId = seniorId,
+                name = "Atorva 10",
+                purpose = "Koluppugal (Cholesterol)",
+                dosage = "1 tab",
+                pillColorHex = "#E91E63",
+                pillEmoji = "💊",
+                scheduleTimes = listOf("21:30"),
+                instructions = "Iravu thoongum munpu edunga",
+                remainingPills = 28,
+                shape = "capsule",
+                colorIndex = 6
             )
         )
         for (med in meds) {
