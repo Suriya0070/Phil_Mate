@@ -21,6 +21,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+enum class LedStatus { NONE, GREEN, RED }
+
 data class SeniorUiState(
     val user: User? = null,
     val medications: List<Medication> = emptyList(),
@@ -36,7 +38,13 @@ data class SeniorUiState(
     val isMonitored: Boolean = false,
     val hasVoiceNote: Boolean = false,
     val dailyChallenge: String? = null,
-    val selectedDayOffset: Int = 0
+    val selectedDayOffset: Int = 0,
+    // Smart Box simulation
+    val bandConnected: Boolean = true,
+    val boxLedStatus: LedStatus = LedStatus.NONE,
+    val boxLedMessage: String = "",
+    val cameraMonitoringActive: Boolean = false,
+    val intakeDetected: Boolean? = null  // null=waiting, true=detected, false=not detected
 )
 
 class SeniorViewModel : ViewModel() {
@@ -194,14 +202,14 @@ class SeniorViewModel : ViewModel() {
     }
 
     fun confirmDoseByVoice(spokenText: String) {
-        val lower = spokenText.lowercase()
-        val tookPatterns = listOf("potuten", "potutten", "took", "taken", "eduthen", "eduten", "saptuten", "போட்டுட்டேன்", "எடுத்துட்டேன்", "சாப்பிட்டுட்டேன்")
-        if (tookPatterns.none { lower.contains(it) }) return
+        val lower = spokenText.lowercase().trim()
         val doses = _state.value.todayDoses
+        // First: try to match medicine name in speech regardless of "potuten" keyword
         for (dose in doses) {
             if (dose.isTaken() || dose.isMissed()) continue
             val words = dose.medicationName.lowercase().split(" ", "-")
-            if (words.any { it.length > 3 && lower.contains(it) } || lower.contains(dose.medicationName.lowercase())) {
+            val nameMatch = words.any { it.length > 3 && lower.contains(it) } || lower.contains(dose.medicationName.lowercase())
+            if (nameMatch) {
                 viewModelScope.launch {
                     medRepo.confirmDose(dose, null)
                     _state.value = _state.value.copy(successMessage = "✅ ${dose.medicationName} எடுத்துவிட்டீர்கள்! (Marked as taken!)")
@@ -209,11 +217,15 @@ class SeniorViewModel : ViewModel() {
                 return
             }
         }
-        val pending = doses.filter { !it.isTaken() && !it.isMissed() }
-        if (pending.size == 1) {
-            viewModelScope.launch {
-                medRepo.confirmDose(pending.first(), null)
-                _state.value = _state.value.copy(successMessage = "✅ ${pending.first().medicationName} எடுத்துவிட்டீர்கள்! (Marked as taken!)")
+        // Fallback: if "potuten/took/taken" keyword found and only one pending → auto-confirm
+        val tookPatterns = listOf("potuten", "potutten", "took", "taken", "eduthen", "eduten", "saptuten", "போட்டுட்டேன்", "எடுத்துட்டேன்")
+        if (tookPatterns.any { lower.contains(it) }) {
+            val pending = doses.filter { !it.isTaken() && !it.isMissed() }
+            if (pending.size == 1) {
+                viewModelScope.launch {
+                    medRepo.confirmDose(pending.first(), null)
+                    _state.value = _state.value.copy(successMessage = "✅ ${pending.first().medicationName} எடுத்துவிட்டீர்கள்!")
+                }
             }
         }
     }
@@ -221,6 +233,65 @@ class SeniorViewModel : ViewModel() {
     fun seedDemoMedications() {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch { medRepo.seedDemoData(uid) }
+    }
+
+    // Smart Box: called when patient picks up a medicine strip
+    fun onMedicineStripPicked(pickedMedicationId: String) {
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val currentSlotDoses = _state.value.todayDoses.filter { dose ->
+            val cal = java.util.Calendar.getInstance()
+            cal.timeInMillis = dose.scheduledTime
+            val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
+            when (hour) {
+                in 6..11 -> h in 6..11
+                in 12..16 -> h in 12..16
+                in 17..20 -> h in 17..20
+                else -> h >= 21 || h < 6
+            }
+        }.filter { !it.isTaken() }
+
+        val isCorrect = currentSlotDoses.any { it.medicationId == pickedMedicationId }
+        if (isCorrect) {
+            _state.value = _state.value.copy(
+                boxLedStatus = LedStatus.GREEN,
+                boxLedMessage = "✅ சரியான மருந்து! (Correct medicine!)",
+                cameraMonitoringActive = true,
+                intakeDetected = null
+            )
+            // Simulate camera detecting intake after 3 seconds
+            viewModelScope.launch {
+                delay(3000)
+                _state.value = _state.value.copy(intakeDetected = true, cameraMonitoringActive = false)
+                delay(4000)
+                _state.value = _state.value.copy(boxLedStatus = LedStatus.NONE, boxLedMessage = "", intakeDetected = null)
+            }
+        } else {
+            _state.value = _state.value.copy(
+                boxLedStatus = LedStatus.RED,
+                boxLedMessage = "❌ தவறான மருந்து! (Wrong medicine!) — Please check",
+                cameraMonitoringActive = false,
+                intakeDetected = null
+            )
+            viewModelScope.launch {
+                delay(4000)
+                _state.value = _state.value.copy(boxLedStatus = LedStatus.NONE, boxLedMessage = "")
+            }
+        }
+    }
+
+    fun getCurrentSlotMeds(): List<Medication> {
+        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        return _state.value.medications.filter { med ->
+            med.scheduleTimes.any { t ->
+                val h = t.split(":").getOrNull(0)?.toIntOrNull() ?: 0
+                when (hour) {
+                    in 6..11 -> h in 6..11
+                    in 12..16 -> h in 12..16
+                    in 17..20 -> h in 17..20
+                    else -> h >= 21 || h < 6
+                }
+            }
+        }
     }
 
     fun checkFamilyVoiceNote() {

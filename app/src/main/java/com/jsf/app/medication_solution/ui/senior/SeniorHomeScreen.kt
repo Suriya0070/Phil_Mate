@@ -1,7 +1,12 @@
 package com.jsf.app.medication_solution.ui.senior
 
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -161,6 +166,15 @@ fun SeniorHomeScreen(
         ) {
             // Summary card
             item { SummaryCard(taken = taken, total = total) }
+
+            // Smart Medicine Box
+            item {
+                SmartMedicineBoxCard(
+                    state = state,
+                    onStripPicked = { medId -> viewModel.onMedicineStripPicked(medId) },
+                    currentSlotMeds = viewModel.getCurrentSlotMeds()
+                )
+            }
 
             // Family voice note
             if (state.hasVoiceNote) {
@@ -434,6 +448,122 @@ private fun ScheduledMedicineCard(medication: Medication, times: List<String>) {
             }
             Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFE3F2FD)) {
                 Text("📅 திட்டம்", modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFF1565C0))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SmartMedicineBoxCard(
+    state: SeniorUiState,
+    currentSlotMeds: List<com.jsf.app.medication_solution.data.model.Medication>,
+    onStripPicked: (String) -> Unit
+) {
+    val context = LocalContext.current
+    val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
+    val slotName = when (hour) {
+        in 6..11 -> "🌅 காலை (Morning)"
+        in 12..16 -> "☀️ மதியம் (Afternoon)"
+        in 17..20 -> "🌆 மாலை (Evening)"
+        else -> "🌙 இரவு (Night)"
+    }
+    val ledColor = when (state.boxLedStatus) {
+        LedStatus.GREEN -> Color(0xFF4CAF50)
+        LedStatus.RED -> Color(0xFFF44336)
+        LedStatus.NONE -> Color(0xFF9E9E9E)
+    }
+    val ledPulse = rememberInfiniteTransition(label = "led")
+    val ledAlpha by ledPulse.animateFloat(
+        initialValue = 0.6f, targetValue = 1f,
+        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "alpha"
+    )
+
+    // Vibrate on RED
+    LaunchedEffect(state.boxLedStatus) {
+        if (state.boxLedStatus == LedStatus.RED) {
+            val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+                val vm = context.getSystemService(android.os.VibratorManager::class.java)
+                vm?.defaultVibrator
+            } else {
+                @Suppress("DEPRECATION")
+                context.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? android.os.Vibrator
+            }
+            vibrator?.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 300, 200, 300, 200, 300), -1))
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A237E)),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(6.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("💊 Smart Medicine Box", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
+                // LED indicator
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(modifier = Modifier.size(14.dp).alpha(if (state.boxLedStatus != LedStatus.NONE) ledAlpha else 1f).clip(CircleShape).background(ledColor))
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (state.bandConnected) "Band ●" else "Band ○", style = MaterialTheme.typography.labelSmall, color = if (state.bandConnected) Color(0xFF69F0AE) else Color.Gray)
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Current slot: $slotName", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+
+            if (state.boxLedMessage.isNotBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Surface(shape = RoundedCornerShape(10.dp), color = ledColor.copy(alpha = 0.25f)) {
+                    Text(state.boxLedMessage, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            // Camera monitoring
+            if (state.cameraMonitoringActive || state.intakeDetected != null) {
+                Spacer(Modifier.height(8.dp))
+                Surface(shape = RoundedCornerShape(10.dp), color = Color.Black.copy(alpha = 0.4f)) {
+                    Row(modifier = Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("📷", fontSize = 20.sp)
+                        Spacer(Modifier.width(8.dp))
+                        when {
+                            state.cameraMonitoringActive -> {
+                                val dots by rememberInfiniteTransition(label = "d").animateFloat(0f, 3f, infiniteRepeatable(tween(900)), label = "d2")
+                                Text("Monitoring intake" + ".".repeat(dots.toInt() + 1), style = MaterialTheme.typography.bodySmall, color = Color.White)
+                            }
+                            state.intakeDetected == true -> Text("✅ Medicine intake detected!", style = MaterialTheme.typography.bodySmall, color = Color(0xFF69F0AE), fontWeight = FontWeight.Bold)
+                            state.intakeDetected == false -> Text("⚠️ Intake not detected", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFD740))
+                        }
+                    }
+                }
+            }
+
+            // Current tray medicines — tap each strip to confirm
+            if (currentSlotMeds.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("Tray dispensed — pick your strip:", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    currentSlotMeds.forEach { med ->
+                        val pillColor = runCatching { Color(android.graphics.Color.parseColor(med.pillColorHex)) }.getOrElse { Color(0xFF4CAF50) }
+                        val doseForMed = state.todayDoses.find { it.medicationId == med.id }
+                        val alreadyTaken = doseForMed?.isTaken() == true
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (alreadyTaken) Color.Gray.copy(alpha = 0.4f) else pillColor.copy(alpha = 0.85f),
+                            modifier = Modifier.weight(1f).clickable(enabled = !alreadyTaken) { onStripPicked(med.id) }
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(med.pillEmoji, fontSize = 26.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Text(med.name.split(" ").first(), style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                                if (alreadyTaken) Text("✅", fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            } else {
+                Spacer(Modifier.height(8.dp))
+                Text("No medicines for current time slot", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f))
             }
         }
     }
