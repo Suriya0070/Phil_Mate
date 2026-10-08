@@ -83,7 +83,18 @@ class MedicationRepository {
 
     suspend fun createDoseRecordsForToday(seniorId: String, medications: List<Medication>) {
         val today = dateFmt.format(Date())
+
+        // Fetch which dose record IDs already exist — never overwrite them (would erase TAKEN/MISSED)
+        val existing = runCatching {
+            db.collection("doseRecords")
+                .whereEqualTo("seniorId", seniorId)
+                .whereEqualTo("date", today)
+                .get().await()
+        }.getOrNull()
+        val existingIds = existing?.documents?.map { it.id }?.toSet() ?: emptySet()
+
         val batch = db.batch()
+        var hasNew = false
         val cal = Calendar.getInstance()
         for (med in medications) {
             for (timeStr in med.scheduleTimes) {
@@ -99,6 +110,7 @@ class MedicationRepository {
                     set(Calendar.MILLISECOND, 0)
                 }
                 val recordId = "${seniorId}_${med.id}_${today}_${timeStr.replace(":", "").replace(" ", "")}"
+                if (recordId in existingIds) continue   // already exists — never overwrite
                 val record = DoseRecord(
                     id = recordId,
                     medicationId = med.id,
@@ -110,9 +122,10 @@ class MedicationRepository {
                     date = today
                 )
                 batch.set(db.collection("doseRecords").document(recordId), record)
+                hasNew = true
             }
         }
-        runCatching { batch.commit().await() }
+        if (hasNew) runCatching { batch.commit().await() }
     }
 
     suspend fun confirmDose(record: DoseRecord, mood: MoodLevel?): Result<Unit> = runCatching {

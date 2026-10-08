@@ -68,7 +68,9 @@ class SeniorViewModel(app: Application) : AndroidViewModel(app) {
     private var inactivityJob: Job? = null
     private var lastInteraction = System.currentTimeMillis()
     private var autoSeeded = false
+    private var dosesCreatedForDate = ""   // prevents re-creating dose records on every listener update
     private val timeFmt = SimpleDateFormat("h:mm a", Locale.getDefault())
+    private val dateFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
 
     private val engagementMessages = listOf(
         "👋 Hey! What's your favourite Tamil song?",
@@ -120,15 +122,28 @@ class SeniorViewModel(app: Application) : AndroidViewModel(app) {
                 medRepo.getTodayDoseRecords(seniorId)
             ) { meds, doses -> Pair(meds, doses) }
                 .collect { (meds, doses) ->
-                    if (doses.isEmpty() && meds.isNotEmpty()) {
+                    val today = dateFmt.format(java.util.Date())
+
+                    // Only create dose records once per day, never on subsequent listener updates
+                    if (meds.isNotEmpty() && dosesCreatedForDate != today) {
+                        dosesCreatedForDate = today
                         medRepo.createDoseRecordsForToday(seniorId, meds)
                     }
+
+                    // Never show an empty list while Firestore is just catching up —
+                    // keep the last known list until we have real data
+                    val safeMeds  = if (meds.isNotEmpty()) meds  else _state.value.medications
+                    val safeDoses = if (doses.isNotEmpty()) doses else _state.value.todayDoses
+
                     _state.value = _state.value.copy(
-                        medications = meds,
-                        todayDoses = doses,
-                        isLoading = false
+                        medications = safeMeds,
+                        todayDoses  = safeDoses,
+                        isLoading   = false
                     )
-                    medRepo.markMissedDoses(seniorId)
+
+                    // Mark missed doses only once per load, not on every Firestore event
+                    if (meds.isNotEmpty()) medRepo.markMissedDoses(seniorId)
+
                     if (meds.isEmpty() && !autoSeeded) {
                         autoSeeded = true
                         delay(2000)
