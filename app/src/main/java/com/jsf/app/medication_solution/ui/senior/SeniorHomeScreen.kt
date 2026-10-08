@@ -1,12 +1,7 @@
 package com.jsf.app.medication_solution.ui.senior
 
 import android.app.Activity
-import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,6 +14,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,16 +36,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.jsf.app.medication_solution.data.model.DoseRecord
 import com.jsf.app.medication_solution.data.model.DoseStatus
 import com.jsf.app.medication_solution.data.model.Medication
 import com.jsf.app.medication_solution.ui.theme.CareBlue
 import com.jsf.app.medication_solution.ui.theme.MedGreen
+import com.jsf.app.medication_solution.ui.theme.MedPalette
 import com.jsf.app.medication_solution.ui.theme.StatusAmber
 import com.jsf.app.medication_solution.ui.theme.StatusGreen
 import com.jsf.app.medication_solution.ui.theme.StatusRed
@@ -69,6 +69,7 @@ fun SeniorHomeScreen(
     val state by viewModel.state.collectAsState()
     val (taken, total) = viewModel.getAdherenceToday()
     val context = LocalContext.current
+    val ts = state.textSizePref.scale
 
     val speechLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -118,14 +119,38 @@ fun SeniorHomeScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text(greeting, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
-                        Text(state.user?.name ?: "", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+                        Text(
+                            greeting,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            fontSize = (16 * ts).sp
+                        )
+                        Text(
+                            state.user?.name ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = (12 * ts).sp
+                        )
                     }
                 },
                 actions = {
                     if (state.isMonitored) CameraIndicatorDot()
-                    IconButton(onClick = onVoiceAssistant) { Icon(Icons.Default.Mic, "Voice Assistant", tint = Color.White) }
-                    IconButton(onClick = onLogout) { Icon(Icons.Default.ExitToApp, "Logout", tint = Color.White) }
+                    // Text size toggle
+                    TextButton(onClick = { viewModel.cycleTextSize() }) {
+                        Text(
+                            state.textSizePref.label,
+                            color = Color.White,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = (15 * ts).sp
+                        )
+                    }
+                    IconButton(onClick = onVoiceAssistant) {
+                        Icon(Icons.Default.Mic, "Voice Assistant", tint = Color.White)
+                    }
+                    IconButton(onClick = onLogout) {
+                        Icon(Icons.Default.ExitToApp, "Logout", tint = Color.White)
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MedGreen, titleContentColor = Color.White)
             )
@@ -135,7 +160,7 @@ fun SeniorHomeScreen(
                 ExtendedFloatingActionButton(
                     onClick = { viewModel.seedDemoMedications() },
                     icon = { Icon(Icons.Default.Add, null) },
-                    text = { Text("மருந்துகள் ஏற்று") },
+                    text = { Text("மருந்துகள் ஏற்று", fontSize = (13 * ts).sp) },
                     containerColor = MedGreen,
                     contentColor = Color.White
                 )
@@ -149,25 +174,32 @@ fun SeniorHomeScreen(
                         }
                         speechLauncher.launch(intent)
                     },
-                    containerColor = MedGreen
-                ) { Icon(Icons.Default.Mic, "Quick voice confirm", tint = Color.White) }
+                    containerColor = MedGreen,
+                    modifier = Modifier.size((64 * ts.coerceIn(1f, 1.4f)).dp)
+                ) {
+                    Icon(Icons.Default.Mic, "Quick voice confirm", tint = Color.White,
+                        modifier = Modifier.size((28 * ts.coerceIn(1f, 1.4f)).dp))
+                }
             }
         }
     ) { padding ->
         if (state.isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = MedGreen) }
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = MedGreen)
+            }
             return@Scaffold
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize().background(Color(0xFFF1F8E9)).padding(padding),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFFF1F8E9))
+                .padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Summary card
-            item { SummaryCard(taken = taken, total = total) }
+            item { SummaryCard(taken = taken, total = total, ts = ts) }
 
-            // Smart Medicine Box
             item {
                 SmartMedicineBoxCard(
                     state = state,
@@ -176,16 +208,24 @@ fun SeniorHomeScreen(
                 )
             }
 
-            // Family voice note
             if (state.hasVoiceNote) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFFCE4EC)), shape = RoundedCornerShape(16.dp)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFCE4EC)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
                         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("💌", fontSize = 28.sp)
+                            Text("💌", fontSize = (28 * ts).sp)
                             Spacer(Modifier.width(8.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("குடும்பத்தினரிடம் இருந்து குரல் செய்தி!", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
-                                Text("(Voice message from your family!)", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                                Text("குடும்பத்தினரிடம் இருந்து குரல் செய்தி!",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontSize = (14 * ts).sp)
+                                Text("(Voice message from your family!)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.Gray, fontSize = (11 * ts).sp)
                             }
                             IconButton(onClick = { viewModel.playFamilyVoiceNote(context) }) {
                                 Icon(Icons.Default.PlayArrow, "Play", tint = CareBlue)
@@ -195,36 +235,59 @@ fun SeniorHomeScreen(
                 }
             }
 
-            // Daily brain challenge
             state.dailyChallenge?.let { challenge ->
                 item {
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)), shape = RoundedCornerShape(16.dp)) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text("🧠 தினசரி மூளை பயிற்சி (Daily Brain Exercise)", style = MaterialTheme.typography.labelLarge, color = CareBlue, fontWeight = FontWeight.Bold)
+                            Text(
+                                "🧠 தினசரி மூளை பயிற்சி (Daily Brain Exercise)",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = CareBlue,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = (13 * ts).sp
+                            )
                             Spacer(Modifier.height(4.dp))
-                            Text(challenge, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                            Text(challenge, style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = FontWeight.SemiBold, fontSize = (16 * ts).sp)
                         }
                     }
                 }
             }
 
-            // Success message
             item {
                 AnimatedVisibility(visible = state.successMessage != null, enter = fadeIn() + slideInVertically()) {
                     state.successMessage?.let {
-                        Card(colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)), modifier = Modifier.fillMaxWidth()) {
-                            Text(it, modifier = Modifier.padding(16.dp), style = MaterialTheme.typography.bodyLarge, color = MedGreen, fontWeight = FontWeight.SemiBold)
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFE8F5E9)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                it, modifier = Modifier.padding(16.dp),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MedGreen, fontWeight = FontWeight.SemiBold,
+                                fontSize = (16 * ts).sp
+                            )
                         }
                     }
                 }
             }
 
-            // Weekly calendar row
+            // Full Mon-Sun calendar strip
             item {
-                WeeklyCalendarRow(selectedOffset = state.selectedDayOffset, onDaySelect = viewModel::selectDay)
+                WeeklyCalendarRow(
+                    selectedOffset = state.selectedDayOffset,
+                    onDaySelect = viewModel::selectDay,
+                    todayDoses = state.todayDoses,
+                    medications = state.medications,
+                    ts = ts
+                )
             }
 
-            // Day label
+            // Day label + This Week Grid toggle
             item {
                 val cal = Calendar.getInstance()
                 cal.add(Calendar.DAY_OF_YEAR, state.selectedDayOffset)
@@ -234,72 +297,361 @@ fun SeniorHomeScreen(
                     -1 -> "நேற்று (Yesterday)"
                     else -> SimpleDateFormat("EEEE, MMM d", Locale.getDefault()).format(cal.time)
                 }
-                Text(dayLabel, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MedGreen)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        dayLabel,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MedGreen,
+                        fontSize = (17 * ts).sp,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedButton(
+                        onClick = { viewModel.toggleWeekGrid() },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MedGreen),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp)
+                    ) {
+                        Text(
+                            if (state.showWeekGrid) "📋 Day" else "📅 Week",
+                            fontSize = (12 * ts).sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
             }
 
-            // Medicines by time slot or empty state
+            // This Week Grid (toggleable)
+            if (state.showWeekGrid) {
+                item {
+                    ThisWeekGrid(
+                        medications = state.medications,
+                        todayDoses = state.todayDoses,
+                        ts = ts
+                    )
+                }
+            }
+
             if (state.medications.isEmpty()) {
                 item {
-                    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White)) {
-                        Column(modifier = Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("💊", fontSize = 48.sp)
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color.White)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text("💊", fontSize = (48 * ts).sp)
                             Spacer(Modifier.height(8.dp))
-                            Text("மருந்துகள் இல்லை", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
-                            Text("(No medicines yet)", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            Text("மருந்துகள் இல்லை", style = MaterialTheme.typography.titleMedium,
+                                color = Color.Gray, fontSize = (18 * ts).sp)
+                            Text("(No medicines yet)", style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray, fontSize = (14 * ts).sp)
                         }
                     }
                 }
-            } else {
+            } else if (!state.showWeekGrid) {
                 item {
                     DayMedicationView(
                         dayOffset = state.selectedDayOffset,
                         todayDoses = state.todayDoses,
                         medications = state.medications,
+                        ts = ts,
                         onConfirm = { dose ->
                             viewModel.onUserInteraction()
-                            onMedicationClick(dose, state.medications.find { it.id == dose.medicationId } ?: return@DayMedicationView)
+                            onMedicationClick(
+                                dose,
+                                state.medications.find { it.id == dose.medicationId } ?: return@DayMedicationView
+                            )
                         }
                     )
                 }
             }
 
-            item { Spacer(Modifier.height(80.dp)) }
+            item { Spacer(Modifier.height(88.dp)) }
         }
     }
 }
 
+// ─── Weekly Mon-Sun Calendar Strip ───────────────────────────────────────────
+
 @Composable
-private fun WeeklyCalendarRow(selectedOffset: Int, onDaySelect: (Int) -> Unit) {
-    val dayNames = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-    val days = (-3..3).map { offset ->
+private fun WeeklyCalendarRow(
+    selectedOffset: Int,
+    onDaySelect: (Int) -> Unit,
+    todayDoses: List<DoseRecord>,
+    medications: List<Medication>,
+    ts: Float
+) {
+    val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    val today = Calendar.getInstance()
+    val todayDow = today.get(Calendar.DAY_OF_WEEK) // 1=Sun..7=Sat
+    val daysFromMon = ((todayDow - Calendar.MONDAY) + 7) % 7
+
+    val weekDays = (0..6).map { i ->
+        val offset = i - daysFromMon
         val cal = Calendar.getInstance()
         cal.add(Calendar.DAY_OF_YEAR, offset)
-        Triple(offset, dayNames[cal.get(Calendar.DAY_OF_WEEK) - 1], cal.get(Calendar.DAY_OF_MONTH))
+        Triple(offset, dayNames[i], cal.get(Calendar.DAY_OF_MONTH))
     }
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(horizontal = 4.dp)) {
-        items(days) { (offset, name, num) ->
+
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp)
+    ) {
+        items(weekDays) { (offset, name, num) ->
             val isSelected = offset == selectedOffset
             val isToday = offset == 0
+
+            val dotColor: Color? = when {
+                isToday -> when {
+                    todayDoses.isEmpty() -> null
+                    todayDoses.all { it.isTaken() } -> Color(0xFF4CAF50)
+                    todayDoses.any { it.isMissed() } -> Color(0xFFF44336)
+                    else -> Color(0xFFFF9800)
+                }
+                offset < 0 -> {
+                    val weekIdx = (offset + daysFromMon + 7) % 7
+                    val hasMeds = medications.any { m ->
+                        m.scheduleDays.isEmpty() || m.scheduleDays.contains(weekIdx)
+                    }
+                    if (hasMeds) Color(0xFF90A4AE) else null
+                }
+                else -> {
+                    val weekIdx = (offset + daysFromMon) % 7
+                    val hasMeds = medications.any { m ->
+                        m.scheduleDays.isEmpty() || m.scheduleDays.contains(weekIdx)
+                    }
+                    if (hasMeds) Color(0xFFB0BEC5) else null
+                }
+            }
+
             Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = when { isSelected -> MedGreen; isToday -> MedGreen.copy(alpha = 0.15f); else -> Color.White },
-                modifier = Modifier.width(52.dp).clickable { onDaySelect(offset) }
+                shape = RoundedCornerShape(14.dp),
+                color = when {
+                    isSelected -> MedGreen
+                    isToday -> MedGreen.copy(alpha = 0.12f)
+                    else -> Color.White
+                },
+                shadowElevation = if (isSelected) 4.dp else 1.dp,
+                modifier = Modifier
+                    .width((50 * ts.coerceIn(1f, 1.35f)).dp)
+                    .clickable { onDaySelect(offset) }
             ) {
-                Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(name, style = MaterialTheme.typography.labelSmall, color = if (isSelected) Color.White else if (isToday) MedGreen else Color.Gray, fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal)
-                    Text("$num", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.ExtraBold, color = if (isSelected) Color.White else Color(0xFF1A2E1A))
-                    if (isToday) Box(Modifier.size(5.dp).clip(CircleShape).background(if (isSelected) Color.White else MedGreen))
+                Column(
+                    modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Text(
+                        name,
+                        fontSize = (10 * ts).sp,
+                        color = if (isSelected) Color.White else if (isToday) MedGreen else Color.Gray,
+                        fontWeight = if (isToday || isSelected) FontWeight.ExtraBold else FontWeight.Normal
+                    )
+                    Text(
+                        "$num",
+                        fontSize = (17 * ts).sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isSelected) Color.White else Color(0xFF1A2E1A)
+                    )
+                    Box(
+                        Modifier.size(6.dp).clip(CircleShape).background(
+                            when {
+                                dotColor == null -> Color.Transparent
+                                isSelected -> Color.White
+                                else -> dotColor
+                            }
+                        )
+                    )
                 }
             }
         }
     }
 }
+
+// ─── This Week Grid ───────────────────────────────────────────────────────────
+
+@Composable
+private fun ThisWeekGrid(
+    medications: List<Medication>,
+    todayDoses: List<DoseRecord>,
+    ts: Float
+) {
+    data class SlotInfo(val label: String, val emoji: String, val range: IntRange)
+    val slots = listOf(
+        SlotInfo("Morning", "🌅", 6..11),
+        SlotInfo("Afternoon", "☀️", 12..16),
+        SlotInfo("Evening", "🌆", 17..20),
+        SlotInfo("Night", "🌙", 21..29)
+    )
+    val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    val today = Calendar.getInstance()
+    val daysFromMon = ((today.get(Calendar.DAY_OF_WEEK) - Calendar.MONDAY) + 7) % 7
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                "📅 இந்த வாரம் (This Week)",
+                fontWeight = FontWeight.Bold,
+                color = MedGreen,
+                fontSize = (15 * ts).sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            // Header row
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Spacer(Modifier.width(56.dp))
+                dayNames.forEachIndexed { i, name ->
+                    val offset = i - daysFromMon
+                    val isToday = offset == 0
+                    Text(
+                        name,
+                        modifier = Modifier.weight(1f),
+                        textAlign = TextAlign.Center,
+                        fontSize = (9 * ts).sp,
+                        fontWeight = if (isToday) FontWeight.ExtraBold else FontWeight.Normal,
+                        color = if (isToday) MedGreen else Color.Gray
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+
+            slots.forEach { slot ->
+                val slotMeds = medications.filter { med ->
+                    med.scheduleTimes.any { t ->
+                        val h = t.split(":").getOrNull(0)?.toIntOrNull() ?: 0
+                        val mapped = if (h < 6) h + 24 else h
+                        mapped in slot.range
+                    }
+                }
+                if (slotMeds.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            "${slot.emoji} ${slot.label}",
+                            modifier = Modifier.width(56.dp),
+                            fontSize = (8 * ts).sp,
+                            color = Color.Gray,
+                            maxLines = 1
+                        )
+                        dayNames.forEachIndexed { dayIdx, _ ->
+                            val offset = dayIdx - daysFromMon
+                            val weekDayIdx = dayIdx
+                            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                                val dayMeds = slotMeds.filter { med ->
+                                    med.scheduleDays.isEmpty() || med.scheduleDays.contains(weekDayIdx)
+                                }
+                                if (dayMeds.isNotEmpty()) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(1.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        dayMeds.take(2).forEach { med ->
+                                            val medColor = MedPalette.colorForMedication(med.pillColorHex, med.colorIndex)
+                                            val isTakenToday = offset == 0 &&
+                                                todayDoses.any { it.medicationId == med.id && it.isTaken() }
+                                            Box(
+                                                Modifier
+                                                    .size((9 * ts).dp)
+                                                    .clip(CircleShape)
+                                                    .background(if (isTakenToday) medColor else medColor.copy(alpha = 0.45f))
+                                            )
+                                        }
+                                        if (dayMeds.size > 2) {
+                                            Text("+", fontSize = (7 * ts).sp, color = Color.Gray)
+                                        }
+                                    }
+                                } else {
+                                    Text("·", fontSize = (10 * ts).sp, color = Color(0xFFDDDDDD))
+                                }
+                            }
+                        }
+                    }
+                    Box(Modifier.fillMaxWidth().height(0.5.dp).background(Color(0xFFEEEEEE)))
+                }
+            }
+
+            // Colour legend
+            Spacer(Modifier.height(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                medications.take(4).forEach { med ->
+                    val color = MedPalette.colorForMedication(med.pillColorHex, med.colorIndex)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size((9 * ts).dp).clip(CircleShape).background(color))
+                        Spacer(Modifier.width(3.dp))
+                        Text(
+                            med.name.split(" ").first(),
+                            fontSize = (9 * ts).sp,
+                            color = Color.Gray,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ─── Tablet Shape Icon ────────────────────────────────────────────────────────
+
+@Composable
+fun TabletShapeIcon(color: Color, shape: String, size: Dp = 52.dp) {
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size + 4.dp)) {
+        when (shape) {
+            "oval" -> Box(
+                Modifier
+                    .height(size * 0.65f)
+                    .width(size * 1.3f)
+                    .clip(RoundedCornerShape(50))
+                    .background(color)
+            )
+            "capsule" -> Box(
+                Modifier
+                    .height(size * 0.5f)
+                    .width(size * 1.55f)
+                    .clip(RoundedCornerShape(50))
+            ) {
+                Row(Modifier.fillMaxSize()) {
+                    Box(Modifier.weight(1f).fillMaxHeight().background(color))
+                    Box(Modifier.weight(1f).fillMaxHeight().background(color.copy(alpha = 0.45f)))
+                }
+            }
+            "square" -> Box(
+                Modifier
+                    .size(size * 0.78f)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(color)
+            )
+            else -> Box(  // circle
+                Modifier.size(size).clip(CircleShape).background(color)
+            )
+        }
+    }
+}
+
+// ─── Day Medication View ──────────────────────────────────────────────────────
 
 @Composable
 private fun DayMedicationView(
     dayOffset: Int,
     todayDoses: List<DoseRecord>,
     medications: List<Medication>,
+    ts: Float,
     onConfirm: (DoseRecord) -> Unit
 ) {
     val isToday = dayOffset == 0
@@ -323,10 +675,10 @@ private fun DayMedicationView(
                     mapped in slot.range
                 }
                 if (slotDoses.isNotEmpty()) {
-                    TimeSlotSection(label = slot.label, emoji = slot.emoji, count = slotDoses.size) {
+                    TimeSlotSection(label = slot.label, emoji = slot.emoji, count = slotDoses.size, ts = ts) {
                         slotDoses.forEach { dose ->
                             val med = medications.find { it.id == dose.medicationId }
-                            DoseMedicineCard(dose = dose, medication = med, onConfirm = { onConfirm(dose) })
+                            DoseMedicineCard(dose = dose, medication = med, ts = ts, onConfirm = { onConfirm(dose) })
                         }
                     }
                 }
@@ -339,14 +691,14 @@ private fun DayMedicationView(
                     }
                 }
                 if (slotMeds.isNotEmpty()) {
-                    TimeSlotSection(label = slot.label, emoji = slot.emoji, count = slotMeds.size) {
+                    TimeSlotSection(label = slot.label, emoji = slot.emoji, count = slotMeds.size, ts = ts) {
                         slotMeds.forEach { med ->
                             val times = med.scheduleTimes.filter { t ->
                                 val h = t.split(":").getOrNull(0)?.toIntOrNull() ?: 0
                                 val mapped = if (h < 6) h + 24 else h
                                 mapped in slot.range
                             }
-                            ScheduledMedicineCard(medication = med, times = times)
+                            ScheduledMedicineCard(medication = med, times = times, ts = ts)
                         }
                     }
                 }
@@ -356,23 +708,46 @@ private fun DayMedicationView(
 }
 
 @Composable
-private fun TimeSlotSection(label: String, emoji: String, count: Int, content: @Composable ColumnScope.() -> Unit) {
+private fun TimeSlotSection(
+    label: String,
+    emoji: String,
+    count: Int,
+    ts: Float,
+    content: @Composable ColumnScope.() -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Card(
             modifier = Modifier.fillMaxWidth().clickable { expanded = !expanded },
-            colors = CardDefaults.cardColors(containerColor = if (expanded) MedGreen.copy(alpha = 0.08f) else Color.White),
+            colors = CardDefaults.cardColors(
+                containerColor = if (expanded) MedGreen.copy(alpha = 0.08f) else Color.White
+            ),
             shape = RoundedCornerShape(14.dp),
             elevation = CardDefaults.cardElevation(if (expanded) 0.dp else 2.dp)
         ) {
-            Row(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text(emoji, fontSize = 22.sp)
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = (14 * ts.coerceIn(1f, 1.3f)).dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(emoji, fontSize = (22 * ts).sp)
                 Spacer(Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(label, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold, color = Color(0xFF263238))
-                    Text("$count மருந்து ($count medicine${if (count > 1) "s" else ""})", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Text(
+                        label,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF263238),
+                        fontSize = (15 * ts).sp
+                    )
+                    Text(
+                        "$count மருந்து ($count medicine${if (count > 1) "s" else ""})",
+                        color = Color.Gray,
+                        fontSize = (11 * ts).sp
+                    )
                 }
-                Icon(if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, null, tint = MedGreen)
+                Icon(
+                    if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    null, tint = MedGreen
+                )
             }
         }
         if (expanded) {
@@ -381,12 +756,19 @@ private fun TimeSlotSection(label: String, emoji: String, count: Int, content: @
     }
 }
 
+// ─── Dose Medicine Card (Senior view with "I Took It" button) ─────────────────
+
 @Composable
-private fun DoseMedicineCard(dose: DoseRecord, medication: Medication?, onConfirm: () -> Unit) {
-    val pillColor = remember(medication?.pillColorHex) {
-        runCatching { Color(android.graphics.Color.parseColor(medication?.pillColorHex ?: "#4CAF50")) }
-            .getOrElse { Color(0xFF4CAF50) }
-    }
+private fun DoseMedicineCard(
+    dose: DoseRecord,
+    medication: Medication?,
+    ts: Float,
+    onConfirm: () -> Unit
+) {
+    val medColor = MedPalette.colorForMedication(
+        medication?.pillColorHex ?: "#4CAF50",
+        medication?.colorIndex ?: -1
+    )
     val statusColor = when {
         dose.isTaken() -> Color(0xFF4CAF50)
         dose.isMissed() -> Color(0xFFF44336)
@@ -394,73 +776,181 @@ private fun DoseMedicineCard(dose: DoseRecord, medication: Medication?, onConfir
         else -> Color(0xFF2196F3)
     }
     val statusLabel = when {
-        dose.isTaken() -> "✅ எடுத்துவிட்டீர்கள்"
-        dose.isMissed() -> "❌ தவறிவிட்டீர்கள்"
-        dose.isOverdue() -> "⏰ நேரம் கடந்தது"
-        else -> "🕐 காத்திருக்கிறது"
+        dose.isTaken() -> "✅ எடுத்துவிட்டீர்கள் (Taken)"
+        dose.isMissed() -> "❌ தவறிவிட்டீர்கள் (Missed)"
+        dose.isOverdue() -> "⏰ நேரம் கடந்தது (Overdue)"
+        else -> "🕐 எடுக்க வேண்டியது (Pending)"
     }
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
 
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), shape = RoundedCornerShape(16.dp), elevation = CardDefaults.cardElevation(2.dp)) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(56.dp).clip(CircleShape).background(pillColor.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                Text(medication?.pillEmoji ?: "💊", fontSize = 28.sp)
-            }
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(dose.medicationName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("${medication?.dosage ?: ""} • ${timeFmt.format(Date(dose.scheduledTime))}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                if (medication?.purpose?.isNotBlank() == true) Text(medication.purpose, style = MaterialTheme.typography.labelSmall, color = Color(0xFF546E7A))
-                Spacer(Modifier.height(4.dp))
-                Surface(shape = RoundedCornerShape(8.dp), color = statusColor.copy(alpha = 0.15f)) {
-                    Text(statusLabel, modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = statusColor, fontWeight = FontWeight.SemiBold)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(3.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Tablet image or shape icon
+                if (medication?.imagePath?.isNotBlank() == true) {
+                    AsyncImage(
+                        model = medication.imagePath,
+                        contentDescription = medication.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size((60 * ts.coerceIn(1f, 1.4f)).dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(2.dp, medColor.copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                    )
+                } else {
+                    TabletShapeIcon(
+                        color = medColor,
+                        shape = medication?.shape ?: "circle",
+                        size = (52 * ts.coerceIn(1f, 1.4f)).dp
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        dose.medicationName,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF1A2E1A),
+                        fontSize = (19 * ts).sp
+                    )
+                    if (medication?.purpose?.isNotBlank() == true) {
+                        Text(
+                            medication.purpose,
+                            color = Color(0xFF37474F),
+                            fontWeight = FontWeight.Medium,
+                            fontSize = (14 * ts).sp
+                        )
+                    }
+                    Text(
+                        "${medication?.dosage ?: "1 tablet"} • ${timeFmt.format(Date(dose.scheduledTime))}",
+                        color = Color.Gray,
+                        fontSize = (12 * ts).sp
+                    )
+                    if (medication?.instructions?.isNotBlank() == true) {
+                        Text(
+                            "📋 ${medication.instructions}",
+                            color = Color(0xFF546E7A),
+                            fontSize = (12 * ts).sp
+                        )
+                    }
                 }
             }
-            if (!dose.isTaken() && !dose.isMissed()) {
-                Spacer(Modifier.width(8.dp))
-                Button(
-                    onClick = onConfirm,
-                    colors = ButtonDefaults.buttonColors(containerColor = MedGreen),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                    modifier = Modifier.height(40.dp)
-                ) { Text("எடு\nTake", style = MaterialTheme.typography.labelSmall, color = Color.White, textAlign = TextAlign.Center) }
+            Spacer(Modifier.height(10.dp))
+
+            // Status chip + "I Took It" button
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = statusColor.copy(alpha = 0.12f),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text(
+                        statusLabel,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        color = statusColor,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = (13 * ts).sp
+                    )
+                }
+                if (!dose.isTaken() && !dose.isMissed()) {
+                    Button(
+                        onClick = onConfirm,
+                        colors = ButtonDefaults.buttonColors(containerColor = MedGreen),
+                        modifier = Modifier
+                            .height((64 * ts.coerceIn(1f, 1.4f)).dp)
+                            .widthIn(min = (88 * ts.coerceIn(1f, 1.4f)).dp),
+                        shape = RoundedCornerShape(14.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("✅", fontSize = (20 * ts).sp)
+                            Text(
+                                "எடுத்தேன்",
+                                fontSize = (12 * ts).sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                "I Took It",
+                                fontSize = (10 * ts).sp,
+                                color = Color.White.copy(alpha = 0.85f)
+                            )
+                        }
+                    }
+                }
             }
+
+            // Disclaimer note at bottom
+            Text(
+                "⚠️ Check the label before taking. Picture is for recognition only.",
+                color = Color(0xFF9E9E9E),
+                fontSize = (9 * ts).sp,
+                modifier = Modifier.padding(top = 4.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun ScheduledMedicineCard(medication: Medication, times: List<String>) {
-    val pillColor = remember(medication.pillColorHex) {
-        runCatching { Color(android.graphics.Color.parseColor(medication.pillColorHex)) }
-            .getOrElse { Color(0xFF4CAF50) }
-    }
-    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)), shape = RoundedCornerShape(16.dp)) {
+private fun ScheduledMedicineCard(medication: Medication, times: List<String>, ts: Float) {
+    val medColor = MedPalette.colorForMedication(medication.pillColorHex, medication.colorIndex)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F5F5)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
         Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(56.dp).clip(CircleShape).background(pillColor.copy(alpha = 0.2f)), contentAlignment = Alignment.Center) {
-                Text(medication.pillEmoji, fontSize = 28.sp)
+            if (medication.imagePath.isNotBlank()) {
+                AsyncImage(
+                    model = medication.imagePath,
+                    contentDescription = medication.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size((52 * ts.coerceIn(1f, 1.4f)).dp)
+                        .clip(RoundedCornerShape(10.dp))
+                )
+            } else {
+                TabletShapeIcon(color = medColor, shape = medication.shape, size = (48 * ts.coerceIn(1f, 1.4f)).dp)
             }
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(medication.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("${medication.dosage} • ${times.joinToString(", ")}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
-                Text(medication.purpose, style = MaterialTheme.typography.labelSmall, color = Color(0xFF546E7A))
+                Text(medication.name, fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1A2E1A), fontSize = (17 * ts).sp)
+                if (medication.purpose.isNotBlank()) {
+                    Text(medication.purpose, color = Color(0xFF546E7A), fontSize = (13 * ts).sp)
+                }
+                Text("${medication.dosage} • ${times.joinToString(", ")}",
+                    color = Color.Gray, fontSize = (12 * ts).sp)
             }
             Surface(shape = RoundedCornerShape(8.dp), color = Color(0xFFE3F2FD)) {
-                Text("📅 திட்டம்", modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall, color = Color(0xFF1565C0))
+                Text("📅 Scheduled",
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    color = Color(0xFF1565C0),
+                    fontSize = (11 * ts).sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
     }
 }
+
+// ─── Smart Medicine Box Card (unchanged) ─────────────────────────────────────
 
 @Composable
 private fun SmartMedicineBoxCard(
     state: SeniorUiState,
-    currentSlotMeds: List<com.jsf.app.medication_solution.data.model.Medication>,
+    currentSlotMeds: List<Medication>,
     onStripPicked: (String) -> Unit
 ) {
     val context = LocalContext.current
-    val hour = remember { java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) }
+    val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
     val slotName = when (hour) {
         in 6..11 -> "🌅 காலை (Morning)"
         in 12..16 -> "☀️ மதியம் (Afternoon)"
@@ -478,7 +968,6 @@ private fun SmartMedicineBoxCard(
         animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "alpha"
     )
 
-    // Vibrate on RED
     LaunchedEffect(state.boxLedStatus) {
         if (state.boxLedStatus == LedStatus.RED) {
             val vibrator = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
@@ -500,25 +989,37 @@ private fun SmartMedicineBoxCard(
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("💊 Smart Medicine Box", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
-                // LED indicator
+                Text("💊 Smart Medicine Box",
+                    fontWeight = FontWeight.Bold, color = Color.White,
+                    modifier = Modifier.weight(1f), fontSize = 15.sp)
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(modifier = Modifier.size(14.dp).alpha(if (state.boxLedStatus != LedStatus.NONE) ledAlpha else 1f).clip(CircleShape).background(ledColor))
+                    Box(
+                        modifier = Modifier
+                            .size(14.dp)
+                            .alpha(if (state.boxLedStatus != LedStatus.NONE) ledAlpha else 1f)
+                            .clip(CircleShape)
+                            .background(ledColor)
+                    )
                     Spacer(Modifier.width(6.dp))
-                    Text(if (state.bandConnected) "Band ●" else "Band ○", style = MaterialTheme.typography.labelSmall, color = if (state.bandConnected) Color(0xFF69F0AE) else Color.Gray)
+                    Text(
+                        if (state.bandConnected) "Band ●" else "Band ○",
+                        fontSize = 11.sp,
+                        color = if (state.bandConnected) Color(0xFF69F0AE) else Color.Gray
+                    )
                 }
             }
             Spacer(Modifier.height(4.dp))
-            Text("Current slot: $slotName", style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.7f))
+            Text("Current slot: $slotName", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
 
             if (state.boxLedMessage.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Surface(shape = RoundedCornerShape(10.dp), color = ledColor.copy(alpha = 0.25f)) {
-                    Text(state.boxLedMessage, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.bodyMedium, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text(state.boxLedMessage,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 }
             }
 
-            // Camera monitoring
             if (state.cameraMonitoringActive || state.intakeDetected != null) {
                 Spacer(Modifier.height(8.dp))
                 Surface(shape = RoundedCornerShape(10.dp), color = Color.Black.copy(alpha = 0.4f)) {
@@ -527,26 +1028,29 @@ private fun SmartMedicineBoxCard(
                         Spacer(Modifier.width(8.dp))
                         when {
                             state.cameraMonitoringActive -> {
-                                val dots by rememberInfiniteTransition(label = "d").animateFloat(0f, 3f, infiniteRepeatable(tween(900)), label = "d2")
-                                Text("Monitoring intake" + ".".repeat(dots.toInt() + 1), style = MaterialTheme.typography.bodySmall, color = Color.White)
+                                val dots by rememberInfiniteTransition(label = "d")
+                                    .animateFloat(0f, 3f, infiniteRepeatable(tween(900)), label = "d2")
+                                Text("Monitoring intake" + ".".repeat(dots.toInt() + 1),
+                                    fontSize = 13.sp, color = Color.White)
                             }
-                            state.intakeDetected == true -> Text("✅ Medicine intake detected!", style = MaterialTheme.typography.bodySmall, color = Color(0xFF69F0AE), fontWeight = FontWeight.Bold)
-                            state.intakeDetected == false -> Text("⚠️ Intake not detected", style = MaterialTheme.typography.bodySmall, color = Color(0xFFFFD740))
+                            state.intakeDetected == true ->
+                                Text("✅ Medicine intake detected!", fontSize = 13.sp,
+                                    color = Color(0xFF69F0AE), fontWeight = FontWeight.Bold)
+                            else ->
+                                Text("⚠️ Intake not detected", fontSize = 13.sp, color = Color(0xFFFFD740))
                         }
                     }
                 }
             }
 
-            // Current tray medicines — tap each strip to confirm
             if (currentSlotMeds.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("Tray dispensed — pick your strip:", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.7f))
+                Text("Tray dispensed — pick your strip:", fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
                 Spacer(Modifier.height(6.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     currentSlotMeds.forEach { med ->
-                        val pillColor = runCatching { Color(android.graphics.Color.parseColor(med.pillColorHex)) }.getOrElse { Color(0xFF4CAF50) }
-                        val doseForMed = state.todayDoses.find { it.medicationId == med.id }
-                        val alreadyTaken = doseForMed?.isTaken() == true
+                        val pillColor = MedPalette.colorForMedication(med.pillColorHex, med.colorIndex)
+                        val alreadyTaken = state.todayDoses.find { it.medicationId == med.id }?.isTaken() == true
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = if (alreadyTaken) Color.Gray.copy(alpha = 0.4f) else pillColor.copy(alpha = 0.85f),
@@ -555,7 +1059,9 @@ private fun SmartMedicineBoxCard(
                             Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(med.pillEmoji, fontSize = 26.sp)
                                 Spacer(Modifier.height(4.dp))
-                                Text(med.name.split(" ").first(), style = MaterialTheme.typography.labelSmall, color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
+                                Text(med.name.split(" ").first(), fontSize = 11.sp,
+                                    color = Color.White, fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center, maxLines = 1)
                                 if (alreadyTaken) Text("✅", fontSize = 12.sp)
                             }
                         }
@@ -563,40 +1069,61 @@ private fun SmartMedicineBoxCard(
                 }
             } else {
                 Spacer(Modifier.height(8.dp))
-                Text("No medicines for current time slot", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.5f))
+                Text("No medicines for current time slot", fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.5f))
             }
         }
     }
 }
 
+// ─── Summary Card ─────────────────────────────────────────────────────────────
+
 @Composable
-private fun SummaryCard(taken: Int, total: Int) {
+private fun SummaryCard(taken: Int, total: Int, ts: Float) {
     val dateStr = remember { SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date()) }
     val progress = if (total == 0) 0f else taken.toFloat() / total.toFloat()
     val allDone = taken == total && total > 0
 
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = if (allDone) MedGreen else Color.White), elevation = CardDefaults.cardElevation(4.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = if (allDone) MedGreen else Color.White),
+        elevation = CardDefaults.cardElevation(4.dp)
+    ) {
         Column(modifier = Modifier.padding(20.dp)) {
-            Text(dateStr, style = MaterialTheme.typography.bodyMedium, color = if (allDone) Color.White.copy(alpha = 0.8f) else Color.Gray)
-            Text("இன்றைய மருந்துகள் (Today's Medicines)", style = MaterialTheme.typography.labelSmall, color = if (allDone) Color.White.copy(alpha = 0.7f) else Color.Gray)
+            Text(dateStr, fontSize = (13 * ts).sp,
+                color = if (allDone) Color.White.copy(alpha = 0.8f) else Color.Gray)
+            Text("இன்றைய மருந்துகள் (Today's Medicines)", fontSize = (11 * ts).sp,
+                color = if (allDone) Color.White.copy(alpha = 0.7f) else Color.Gray)
             Spacer(Modifier.height(8.dp))
             when {
-                total == 0 -> Text("மருந்துகள் இல்லை (No medicines scheduled)", style = MaterialTheme.typography.titleMedium, color = Color.Gray)
+                total == 0 -> Text("மருந்துகள் இல்லை (No medicines scheduled)",
+                    fontSize = (16 * ts).sp, color = Color.Gray)
                 allDone -> {
-                    Text("🎉 எல்லா மருந்துகளும் எடுத்தீர்கள்!", style = MaterialTheme.typography.headlineSmall, color = Color.White, fontWeight = FontWeight.Bold)
-                    Text("(All medicines taken! Great job!)", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.85f))
+                    Text("🎉 எல்லா மருந்துகளும் எடுத்தீர்கள்!",
+                        fontSize = (20 * ts).sp, color = Color.White, fontWeight = FontWeight.Bold)
+                    Text("(All medicines taken! Great job!)",
+                        fontSize = (14 * ts).sp, color = Color.White.copy(alpha = 0.85f))
                 }
                 else -> {
-                    Text("$taken / $total மருந்துகள் எடுத்தீர்கள்", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color(0xFF1A2E1A))
+                    Text("$taken / $total மருந்துகள் எடுத்தீர்கள்",
+                        fontSize = (18 * ts).sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1A2E1A))
                     Spacer(Modifier.height(8.dp))
-                    LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)), color = MedGreen, trackColor = Color(0xFFE0E0E0))
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth().height((14 * ts.coerceIn(1f, 1.3f)).dp)
+                            .clip(RoundedCornerShape(7.dp)),
+                        color = MedGreen,
+                        trackColor = Color(0xFFE0E0E0)
+                    )
                 }
             }
         }
     }
 }
 
-// Keep existing public composables for navigation compatibility
+// ─── Public composables kept for nav compatibility ────────────────────────────
+
 @Composable
 fun MedicationCard(medication: Medication, doseRecord: DoseRecord?, onClick: () -> Unit) {
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
@@ -609,20 +1136,32 @@ fun MedicationCard(medication: Medication, doseRecord: DoseRecord?, onClick: () 
         doseRecord != null -> Triple(MedGreen, "எடுக்க வேண்டியது ${timeFmt.format(Date(doseRecord.scheduledTime))}", Color.White)
         else -> Triple(Color.Gray, "இன்று திட்டமிடவில்லை", Color.White)
     }
-    val pillColor = runCatching { Color(android.graphics.Color.parseColor(medication.pillColorHex)) }.getOrElse { MedGreen }
+    val medColor = MedPalette.colorForMedication(medication.pillColorHex, medication.colorIndex)
 
-    Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick), shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = statusBg), elevation = CardDefaults.cardElevation(3.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = statusBg),
+        elevation = CardDefaults.cardElevation(3.dp)
+    ) {
         Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.size(64.dp).clip(CircleShape).background(pillColor.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.size(64.dp).clip(CircleShape).background(medColor.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
                 Text(medication.pillEmoji, fontSize = 32.sp)
             }
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(medication.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF1A2E1A))
-                Text(medication.purpose, style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Text(medication.name, fontWeight = FontWeight.Bold, color = Color(0xFF1A2E1A),
+                    style = MaterialTheme.typography.titleMedium)
+                Text(medication.purpose, color = Color.Gray, style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(6.dp))
                 Surface(shape = RoundedCornerShape(8.dp), color = statusColor.copy(alpha = 0.15f)) {
-                    Text(statusText, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium, color = statusColor, fontWeight = FontWeight.SemiBold)
+                    Text(statusText,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                        color = statusColor, fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.labelMedium)
                 }
             }
         }
@@ -633,20 +1172,30 @@ fun MedicationCard(medication: Medication, doseRecord: DoseRecord?, onClick: () 
 fun EngagementDialog(question: String, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("👋 வணக்கம்!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) },
+        title = {
+            Text("👋 வணக்கம்!", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(question, style = MaterialTheme.typography.bodyLarge)
                 Spacer(Modifier.height(8.dp))
-                Text("நீங்கள் எப்படி இருக்கிறீர்கள்? (Just checking in!)", style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
+                Text("நீங்கள் எப்படி இருக்கிறீர்கள்? (Just checking in!)",
+                    style = MaterialTheme.typography.bodyMedium, color = Color.Gray)
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = MedGreen), modifier = Modifier.fillMaxWidth()) {
-                Text("நான் நலமாக இருக்கிறேன்! 😊 (I'm here!)", style = MaterialTheme.typography.bodyMedium, color = Color.White)
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = MedGreen),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("நான் நலமாக இருக்கிறேன்! 😊 (I'm here!)",
+                    style = MaterialTheme.typography.bodyMedium, color = Color.White)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("பிறகு (Not now)", color = Color.Gray) } }
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("பிறகு (Not now)", color = Color.Gray) }
+        }
     )
 }
 
@@ -654,11 +1203,23 @@ fun EngagementDialog(question: String, onDismiss: () -> Unit) {
 fun DoubleDoseWarningDialog(medicationName: String, takenAt: String, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("🛡️ ஏற்கனவே எடுத்தீர்கள்! (Already Taken!)", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color(0xFFB71C1C)) },
-        text = { Text("$medicationName ஐ $takenAt ல் எடுத்துவிட்டீர்கள்.\n\nமீண்டும் எடுப்பது தீங்கு செய்யலாம். (Taking it again could be harmful. Please wait.)", style = MaterialTheme.typography.bodyLarge) },
+        title = {
+            Text("🛡️ ஏற்கனவே எடுத்தீர்கள்! (Already Taken!)",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold, color = Color(0xFFB71C1C))
+        },
+        text = {
+            Text("$medicationName ஐ $takenAt ல் எடுத்துவிட்டீர்கள்.\n\nமீண்டும் எடுப்பது தீங்கு செய்யலாம். (Taking it again could be harmful. Please wait.)",
+                style = MaterialTheme.typography.bodyLarge)
+        },
         confirmButton = {
-            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = MedGreen), modifier = Modifier.fillMaxWidth()) {
-                Text("சரி, புரிந்தது (OK, I understand)", color = Color.White, fontWeight = FontWeight.Bold)
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = MedGreen),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("சரி, புரிந்தது (OK, I understand)",
+                    color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     )

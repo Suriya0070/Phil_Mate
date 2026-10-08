@@ -1,6 +1,8 @@
 package com.jsf.app.medication_solution.ui.senior
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.jsf.app.medication_solution.data.model.DoseRecord
 import com.jsf.app.medication_solution.data.model.DoseStatus
@@ -23,6 +25,12 @@ import java.util.Locale
 
 enum class LedStatus { NONE, GREEN, RED }
 
+enum class TextSizePref(val scale: Float, val label: String) {
+    NORMAL(1f, "A"),
+    LARGE(1.25f, "A+"),
+    XLARGE(1.5f, "A++")
+}
+
 data class SeniorUiState(
     val user: User? = null,
     val medications: List<Medication> = emptyList(),
@@ -39,17 +47,20 @@ data class SeniorUiState(
     val hasVoiceNote: Boolean = false,
     val dailyChallenge: String? = null,
     val selectedDayOffset: Int = 0,
+    val showWeekGrid: Boolean = false,
+    val textSizePref: TextSizePref = TextSizePref.NORMAL,
     // Smart Box simulation
     val bandConnected: Boolean = true,
     val boxLedStatus: LedStatus = LedStatus.NONE,
     val boxLedMessage: String = "",
     val cameraMonitoringActive: Boolean = false,
-    val intakeDetected: Boolean? = null  // null=waiting, true=detected, false=not detected
+    val intakeDetected: Boolean? = null
 )
 
-class SeniorViewModel : ViewModel() {
+class SeniorViewModel(app: Application) : AndroidViewModel(app) {
     private val authRepo = AuthRepository()
     private val medRepo = MedicationRepository()
+    private val prefs = app.getSharedPreferences("senior_prefs", Context.MODE_PRIVATE)
 
     private val _state = MutableStateFlow(SeniorUiState())
     val state: StateFlow<SeniorUiState> = _state.asStateFlow()
@@ -71,9 +82,11 @@ class SeniorViewModel : ViewModel() {
     )
 
     init {
+        val savedScale = prefs.getFloat("text_scale", 1f)
+        val savedPref = TextSizePref.values().find { it.scale == savedScale } ?: TextSizePref.NORMAL
+        _state.value = _state.value.copy(textSizePref = savedPref, dailyChallenge = getDailyChallenge())
         loadData()
         startInactivityMonitor()
-        _state.value = _state.value.copy(dailyChallenge = getDailyChallenge())
     }
 
     private fun loadData() {
@@ -201,30 +214,48 @@ class SeniorViewModel : ViewModel() {
         _state.value = _state.value.copy(selectedDayOffset = offset)
     }
 
+    fun toggleWeekGrid() {
+        _state.value = _state.value.copy(showWeekGrid = !_state.value.showWeekGrid)
+    }
+
+    fun cycleTextSize() {
+        val next = when (_state.value.textSizePref) {
+            TextSizePref.NORMAL -> TextSizePref.LARGE
+            TextSizePref.LARGE -> TextSizePref.XLARGE
+            TextSizePref.XLARGE -> TextSizePref.NORMAL
+        }
+        prefs.edit().putFloat("text_scale", next.scale).apply()
+        _state.value = _state.value.copy(textSizePref = next)
+    }
+
     fun confirmDoseByVoice(spokenText: String) {
         val lower = spokenText.lowercase().trim()
         val doses = _state.value.todayDoses
-        // First: try to match medicine name in speech regardless of "potuten" keyword
         for (dose in doses) {
             if (dose.isTaken() || dose.isMissed()) continue
             val words = dose.medicationName.lowercase().split(" ", "-")
-            val nameMatch = words.any { it.length > 3 && lower.contains(it) } || lower.contains(dose.medicationName.lowercase())
+            val nameMatch = words.any { it.length > 3 && lower.contains(it) } ||
+                lower.contains(dose.medicationName.lowercase())
             if (nameMatch) {
                 viewModelScope.launch {
                     medRepo.confirmDose(dose, null)
-                    _state.value = _state.value.copy(successMessage = "✅ ${dose.medicationName} எடுத்துவிட்டீர்கள்! (Marked as taken!)")
+                    _state.value = _state.value.copy(
+                        successMessage = "✅ ${dose.medicationName} எடுத்துவிட்டீர்கள்! (Marked as taken!)"
+                    )
                 }
                 return
             }
         }
-        // Fallback: if "potuten/took/taken" keyword found and only one pending → auto-confirm
-        val tookPatterns = listOf("potuten", "potutten", "took", "taken", "eduthen", "eduten", "saptuten", "போட்டுட்டேன்", "எடுத்துட்டேன்")
+        val tookPatterns = listOf("potuten", "potutten", "took", "taken", "eduthen", "eduten",
+            "saptuten", "போட்டுட்டேன்", "எடுத்துட்டேன்")
         if (tookPatterns.any { lower.contains(it) }) {
             val pending = doses.filter { !it.isTaken() && !it.isMissed() }
             if (pending.size == 1) {
                 viewModelScope.launch {
                     medRepo.confirmDose(pending.first(), null)
-                    _state.value = _state.value.copy(successMessage = "✅ ${pending.first().medicationName} எடுத்துவிட்டீர்கள்!")
+                    _state.value = _state.value.copy(
+                        successMessage = "✅ ${pending.first().medicationName} எடுத்துவிட்டீர்கள்!"
+                    )
                 }
             }
         }
@@ -235,7 +266,6 @@ class SeniorViewModel : ViewModel() {
         viewModelScope.launch { medRepo.seedDemoData(uid) }
     }
 
-    // Smart Box: called when patient picks up a medicine strip
     fun onMedicineStripPicked(pickedMedicationId: String) {
         val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
         val currentSlotDoses = _state.value.todayDoses.filter { dose ->
@@ -258,12 +288,13 @@ class SeniorViewModel : ViewModel() {
                 cameraMonitoringActive = true,
                 intakeDetected = null
             )
-            // Simulate camera detecting intake after 3 seconds
             viewModelScope.launch {
                 delay(3000)
                 _state.value = _state.value.copy(intakeDetected = true, cameraMonitoringActive = false)
                 delay(4000)
-                _state.value = _state.value.copy(boxLedStatus = LedStatus.NONE, boxLedMessage = "", intakeDetected = null)
+                _state.value = _state.value.copy(
+                    boxLedStatus = LedStatus.NONE, boxLedMessage = "", intakeDetected = null
+                )
             }
         } else {
             _state.value = _state.value.copy(

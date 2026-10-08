@@ -194,47 +194,55 @@ class MedicationRepository {
         val meds = listOf(
             Medication(
                 seniorId = seniorId,
-                name = "Amlodipine 5mg",
-                purpose = "Blood Pressure",
+                name = "Dolo 650",
+                purpose = "For fever and body pain",
                 dosage = "1 tablet",
-                pillColorHex = "#F44336",
+                pillColorHex = "#E53935",
                 pillEmoji = "🔴",
                 scheduleTimes = listOf("08:00", "20:00"),
-                instructions = "Take with food",
-                remainingPills = 28
+                instructions = "Take after food",
+                remainingPills = 28,
+                shape = "oval",
+                colorIndex = 0
             ),
             Medication(
                 seniorId = seniorId,
-                name = "Metformin 500mg",
-                purpose = "Diabetes",
+                name = "Paracetamol",
+                purpose = "For headache and fever",
                 dosage = "1 tablet",
-                pillColorHex = "#2196F3",
+                pillColorHex = "#1E88E5",
                 pillEmoji = "🔵",
                 scheduleTimes = listOf("07:30", "13:00", "19:30"),
                 instructions = "Take after meals",
-                remainingPills = 45
+                remainingPills = 45,
+                shape = "circle",
+                colorIndex = 1
             ),
             Medication(
                 seniorId = seniorId,
-                name = "Atorvastatin 10mg",
-                purpose = "Cholesterol",
+                name = "BP Tablet",
+                purpose = "For blood pressure",
                 dosage = "1 tablet",
-                pillColorHex = "#FF9800",
+                pillColorHex = "#43A047",
+                pillEmoji = "🟢",
+                scheduleTimes = listOf("09:00"),
+                instructions = "Take in the morning",
+                remainingPills = 20,
+                shape = "capsule",
+                colorIndex = 2
+            ),
+            Medication(
+                seniorId = seniorId,
+                name = "Sugar Tablet",
+                purpose = "For diabetes (sugar)",
+                dosage = "1 tablet",
+                pillColorHex = "#FF8F00",
                 pillEmoji = "🟠",
                 scheduleTimes = listOf("21:00"),
                 instructions = "Take at bedtime",
-                remainingPills = 14
-            ),
-            Medication(
-                seniorId = seniorId,
-                name = "Vitamin D3",
-                purpose = "Bone Health",
-                dosage = "1 capsule",
-                pillColorHex = "#FFEB3B",
-                pillEmoji = "🟡",
-                scheduleTimes = listOf("09:00"),
-                instructions = "Take with breakfast",
-                remainingPills = 60
+                remainingPills = 14,
+                shape = "square",
+                colorIndex = 3
             )
         )
         for (med in meds) {
