@@ -48,7 +48,8 @@ data class VoiceAssistantState(
     val seniorName: String = "",
     val medications: List<Medication> = emptyList(),
     val todayDoses: List<DoseRecord> = emptyList(),
-    val alarmTriggerName: String = ""
+    val alarmTriggerName: String = "",
+    val customOllamaUrl: String = "http://10.0.2.2:11434"
 )
 
 class VoiceAssistantViewModel(app: Application) : AndroidViewModel(app) {
@@ -70,6 +71,8 @@ class VoiceAssistantViewModel(app: Application) : AndroidViewModel(app) {
     private var reportSaved = false
 
     init {
+        OllamaService.loadUrl(getApplication())
+        _state.value = _state.value.copy(customOllamaUrl = OllamaService.currentUrl())
         initTts()
         loadContext()
         checkOllama()
@@ -169,7 +172,7 @@ RULES:
                     selectedModel = preferred,
                     isOllamaAvailable = true
                 )
-                OllamaService.configure("http://10.0.2.2:11434", preferred)
+                OllamaService.configure(OllamaService.currentUrl(), preferred)
             } else {
                 _state.value = _state.value.copy(isOllamaAvailable = false)
             }
@@ -382,7 +385,15 @@ RULES:
 
     fun selectModel(model: String) {
         _state.value = _state.value.copy(selectedModel = model)
-        OllamaService.configure("http://10.0.2.2:11434", model)
+        OllamaService.configure(OllamaService.currentUrl(), model)
+    }
+
+    fun updateOllamaUrl(context: android.content.Context, url: String) {
+        val trimmed = url.trim()
+        if (trimmed.isBlank()) return
+        OllamaService.saveUrl(context, trimmed)
+        _state.value = _state.value.copy(customOllamaUrl = trimmed, isOllamaAvailable = false)
+        checkOllama()
     }
 
     fun clearConversation() {

@@ -11,6 +11,7 @@ import com.jsf.app.medication_solution.data.repository.AuthRepository
 import com.jsf.app.medication_solution.data.repository.MedicationRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +33,9 @@ data class SeniorUiState(
     val showDoubleDoseWarning: Boolean = false,
     val doubleDoseTakenAt: String = "",
     val doubleDoseMedName: String = "",
-    val isMonitored: Boolean = false
+    val isMonitored: Boolean = false,
+    val hasVoiceNote: Boolean = false,
+    val dailyChallenge: String? = null
 )
 
 class SeniorViewModel : ViewModel() {
@@ -61,6 +64,7 @@ class SeniorViewModel : ViewModel() {
     init {
         loadData()
         startInactivityMonitor()
+        _state.value = _state.value.copy(dailyChallenge = getDailyChallenge())
     }
 
     private fun loadData() {
@@ -187,6 +191,40 @@ class SeniorViewModel : ViewModel() {
     fun seedDemoMedications() {
         val uid = authRepo.currentUserId ?: return
         viewModelScope.launch { medRepo.seedDemoData(uid) }
+    }
+
+    fun checkFamilyVoiceNote() {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            runCatching {
+                val ref = com.google.firebase.storage.FirebaseStorage.getInstance()
+                    .reference.child("voiceNotes/$uid/latest.mp4")
+                ref.metadata.await()
+                _state.value = _state.value.copy(hasVoiceNote = true)
+            }
+        }
+    }
+
+    fun playFamilyVoiceNote(context: android.content.Context) {
+        val uid = authRepo.currentUserId ?: return
+        viewModelScope.launch {
+            com.jsf.app.medication_solution.service.VoiceAlarmManager.downloadAndPlayFamilyNote(context, uid)
+        }
+    }
+
+    private fun getDailyChallenge(): String {
+        val challenges = listOf(
+            "🧠 What is 15 + 27?",
+            "🔤 Name 3 vegetables starting with 'C'",
+            "🎯 What day of the week was yesterday?",
+            "🔢 Count backwards from 20 to 1 out loud!",
+            "🌍 Name the capital of India",
+            "🎵 Hum your favorite song for 10 seconds!",
+            "📅 What year were you born?",
+            "🌺 Name 3 flowers you love!"
+        )
+        val dayOfYear = java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_YEAR)
+        return challenges[dayOfYear % challenges.size]
     }
 
     override fun onCleared() {

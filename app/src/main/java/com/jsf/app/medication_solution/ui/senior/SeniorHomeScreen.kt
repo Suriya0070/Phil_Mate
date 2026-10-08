@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import com.jsf.app.medication_solution.data.model.DoseRecord
 import com.jsf.app.medication_solution.data.model.DoseStatus
 import com.jsf.app.medication_solution.data.model.Medication
+import com.jsf.app.medication_solution.ui.theme.CareBlue
 import com.jsf.app.medication_solution.ui.theme.MedGreen
 import com.jsf.app.medication_solution.ui.theme.StatusAmber
 import com.jsf.app.medication_solution.ui.theme.StatusGreen
@@ -54,8 +57,12 @@ fun SeniorHomeScreen(
     val (taken, total) = viewModel.getAdherenceToday()
     val greeting = getGreeting()
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    val context = LocalContext.current
 
-    LaunchedEffect(Unit) { viewModel.onUserInteraction() }
+    LaunchedEffect(Unit) {
+        viewModel.onUserInteraction()
+        viewModel.checkFamilyVoiceNote()
+    }
 
     if (state.showEngagement) {
         EngagementDialog(
@@ -143,6 +150,47 @@ fun SeniorHomeScreen(
             // Date and summary card
             item {
                 SummaryCard(taken = taken, total = total)
+            }
+
+            // Family voice note card
+            if (state.hasVoiceNote) {
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFCE4EC)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("💌", fontSize = 28.sp)
+                            Spacer(Modifier.width(8.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Voice message from your family!", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
+                                Text("Tap to listen", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                            }
+                            IconButton(onClick = { viewModel.playFamilyVoiceNote(context) }) {
+                                Icon(Icons.Default.PlayArrow, "Play", tint = CareBlue)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Daily brain challenge
+            state.dailyChallenge?.let { challenge ->
+                item {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE3F2FD)),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("🧠 Daily Brain Exercise", style = MaterialTheme.typography.labelLarge, color = CareBlue, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.height(4.dp))
+                            Text(challenge, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+                            Text("Keeping your mind sharp!", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        }
+                    }
+                }
             }
 
             // Success message

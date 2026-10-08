@@ -50,12 +50,14 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.work.runtime.ktx)
     implementation(libs.coil.compose)
+    implementation(libs.mlkit.face.detection)
 
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
     implementation(libs.firebase.firestore)
     implementation(libs.firebase.messaging)
+    implementation(libs.firebase.storage)
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

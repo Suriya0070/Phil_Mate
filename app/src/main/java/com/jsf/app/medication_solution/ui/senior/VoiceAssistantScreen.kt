@@ -26,7 +26,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
@@ -184,16 +186,35 @@ fun VoiceAssistantScreen(
         ) {
             // Ollama not available banner
             if (!state.isOllamaAvailable) {
+                var urlInput by remember { mutableStateOf(state.customOllamaUrl) }
+                val ctx = LocalContext.current
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF8E1))
                 ) {
-                    Text(
-                        "⚠️ Ollama not detected at 10.0.2.2:11434\nMake sure Ollama is running on your PC.\nYou can still type questions for offline answers.",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF795548)
-                    )
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("⚠️ Cannot reach Ollama", style = MaterialTheme.typography.titleSmall, color = Color(0xFFF57F17), fontWeight = FontWeight.Bold)
+                        Text("Is Ollama running on your laptop?", style = MaterialTheme.typography.bodySmall, color = Color(0xFF795548))
+                        Text("Start it with: ollama serve", style = MaterialTheme.typography.labelSmall, color = Color.Gray, fontFamily = FontFamily.Monospace)
+                        Spacer(Modifier.height(4.dp))
+                        Text("Or enter a custom Ollama URL:", style = MaterialTheme.typography.bodySmall, color = Color(0xFF795548))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            OutlinedTextField(
+                                value = urlInput,
+                                onValueChange = { urlInput = it },
+                                modifier = Modifier.weight(1f),
+                                placeholder = { Text("http://192.168.1.x:11434", style = MaterialTheme.typography.labelSmall) },
+                                singleLine = true,
+                                textStyle = MaterialTheme.typography.bodySmall.copy(fontSize = 12.sp)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Button(
+                                onClick = { viewModel.updateOllamaUrl(ctx, urlInput) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF57F17))
+                            ) { Text("Connect", color = Color.White) }
+                        }
+                        Text("💡 Offline mode: answers from built-in knowledge", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    }
                 }
             }
 

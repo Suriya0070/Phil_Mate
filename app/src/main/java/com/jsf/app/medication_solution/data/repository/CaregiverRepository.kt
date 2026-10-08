@@ -131,4 +131,55 @@ class CaregiverRepository {
         ref.set(medication.copy(id = ref.id, createdAt = System.currentTimeMillis())).await()
         ref.id
     }
+
+    suspend fun saveEmergencyContact(seniorId: String, name: String, phone: String) {
+        runCatching {
+            db.collection("users").document(seniorId).update(
+                mapOf("emergencyContactName" to name, "emergencyContactPhone" to phone)
+            ).await()
+        }
+    }
+
+    fun getEmergencyContact(seniorId: String): Flow<Pair<String, String>> = callbackFlow {
+        val listener = db.collection("users").document(seniorId)
+            .addSnapshotListener { snap, _ ->
+                val name = snap?.getString("emergencyContactName") ?: ""
+                val phone = snap?.getString("emergencyContactPhone") ?: ""
+                trySend(Pair(name, phone))
+            }
+        awaitClose { listener.remove() }
+    }
+
+    suspend fun calculateAdherenceStreak(seniorId: String): Int {
+        return runCatching {
+            val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            var streak = 0
+            val cal = Calendar.getInstance()
+            for (i in 0..6) {
+                val dateStr = fmt.format(cal.time)
+                val snap = db.collection("doseRecords")
+                    .whereEqualTo("seniorId", seniorId)
+                    .whereEqualTo("date", dateStr)
+                    .get().await()
+                val doses = snap.documents.mapNotNull { it.toObject(DoseRecord::class.java) }
+                if (doses.isEmpty()) break
+                if (!doses.all { it.doseStatus() == DoseStatus.TAKEN }) break
+                streak++
+                cal.add(Calendar.DAY_OF_YEAR, -1)
+            }
+            streak
+        }.getOrDefault(0)
+    }
+
+    suspend fun setInteractionSchedule(seniorId: String, caregiverId: String, intervalMinutes: Int) {
+        runCatching {
+            db.collection("interactionSchedules").document(seniorId).set(mapOf(
+                "seniorId" to seniorId,
+                "caregiverId" to caregiverId,
+                "intervalMinutes" to intervalMinutes,
+                "enabled" to true,
+                "updatedAt" to System.currentTimeMillis()
+            )).await()
+        }
+    }
 }

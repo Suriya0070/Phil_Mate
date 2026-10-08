@@ -14,6 +14,7 @@ import com.jsf.app.medication_solution.data.repository.AuthRepository
 import com.jsf.app.medication_solution.data.repository.CaregiverRepository
 import com.jsf.app.medication_solution.service.AlarmScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -47,7 +48,17 @@ data class CaregiverUiState(
     val noSeniorLinked: Boolean = false,
     val linkDialogVisible: Boolean = false,
     val linkEmail: String = "",
-    val linkSuccess: String? = null
+    val linkSuccess: String? = null,
+    val cameraSnapshotUrl: String? = null,
+    val vitalBP: String = "120/80",
+    val vitalHR: Int = 72,
+    val vitalSpO2: Int = 98,
+    val emergencyContact: String = "",
+    val emergencyContactPhone: String = "",
+    val showVoiceAlarmRecorder: Boolean = false,
+    val showFamilyNoteRecorder: Boolean = false,
+    val showEmergencyDialog: Boolean = false,
+    val streak: Int = 0
 )
 
 class CaregiverViewModel : ViewModel() {
@@ -145,6 +156,15 @@ class CaregiverViewModel : ViewModel() {
             caregiverRepo.observeConversationReports(seniorId).collect { reports ->
                 _state.value = _state.value.copy(conversationReports = reports)
             }
+        }
+        viewModelScope.launch {
+            caregiverRepo.getEmergencyContact(seniorId).collect { (name, phone) ->
+                _state.value = _state.value.copy(emergencyContact = name, emergencyContactPhone = phone)
+            }
+        }
+        viewModelScope.launch {
+            val streak = caregiverRepo.calculateAdherenceStreak(seniorId)
+            _state.value = _state.value.copy(streak = streak)
         }
     }
 
@@ -258,4 +278,44 @@ class CaregiverViewModel : ViewModel() {
 
     fun clearError() { _state.value = _state.value.copy(error = null) }
     fun clearLinkSuccess() { _state.value = _state.value.copy(linkSuccess = null) }
+
+    fun showVoiceAlarmRecorder() { _state.value = _state.value.copy(showVoiceAlarmRecorder = true) }
+    fun hideVoiceAlarmRecorder() { _state.value = _state.value.copy(showVoiceAlarmRecorder = false) }
+    fun showFamilyNoteRecorder() { _state.value = _state.value.copy(showFamilyNoteRecorder = true) }
+    fun hideFamilyNoteRecorder() { _state.value = _state.value.copy(showFamilyNoteRecorder = false) }
+    fun showEmergencyDialog() { _state.value = _state.value.copy(showEmergencyDialog = true) }
+    fun hideEmergencyDialog() { _state.value = _state.value.copy(showEmergencyDialog = false) }
+
+    fun saveEmergencyContact(name: String, phone: String) {
+        val seniorId = _state.value.seniorSnapshot?.user?.id ?: return
+        _state.value = _state.value.copy(emergencyContact = name, emergencyContactPhone = phone, showEmergencyDialog = false)
+        viewModelScope.launch { caregiverRepo.saveEmergencyContact(seniorId, name, phone) }
+    }
+
+    fun simulateVitals() {
+        val parts = _state.value.vitalBP.split("/").map { it.trim().toIntOrNull() ?: 120 }
+        val sys = (parts.getOrElse(0) { 120 } + (-3..3).random()).coerceIn(90, 180)
+        val dia = (parts.getOrElse(1) { 80 } + (-2..2).random()).coerceIn(60, 110)
+        val hr = (_state.value.vitalHR + (-2..2).random()).coerceIn(50, 120)
+        val spo2 = (_state.value.vitalSpO2 + (-1..1).random()).coerceIn(90, 100)
+        _state.value = _state.value.copy(vitalBP = "$sys/$dia", vitalHR = hr, vitalSpO2 = spo2)
+    }
+
+    fun refreshCameraSnapshot() {
+        val seniorId = _state.value.seniorSnapshot?.user?.id ?: return
+        viewModelScope.launch {
+            runCatching {
+                val ref = com.google.firebase.storage.FirebaseStorage.getInstance()
+                    .reference.child("monitoring/$seniorId/latest.jpg")
+                val url = ref.downloadUrl.await().toString()
+                _state.value = _state.value.copy(cameraSnapshotUrl = url)
+            }
+        }
+    }
+
+    fun scheduleImmediateCheckIn(context: Context) {
+        val seniorId = _state.value.seniorSnapshot?.user?.id ?: return
+        AlarmScheduler.scheduleCheckIn(context, seniorId, 1)
+        _state.value = _state.value.copy(linkSuccess = "Check-in scheduled in 1 minute!")
+    }
 }

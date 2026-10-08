@@ -21,6 +21,20 @@ object OllamaService {
         model = modelName
     }
 
+    fun saveUrl(context: android.content.Context, url: String) {
+        context.getSharedPreferences("ollama_prefs", android.content.Context.MODE_PRIVATE)
+            .edit().putString("base_url", url.trimEnd('/')).apply()
+        baseUrl = url.trimEnd('/')
+    }
+
+    fun loadUrl(context: android.content.Context) {
+        val saved = context.getSharedPreferences("ollama_prefs", android.content.Context.MODE_PRIVATE)
+            .getString("base_url", "http://10.0.2.2:11434") ?: "http://10.0.2.2:11434"
+        baseUrl = saved
+    }
+
+    fun currentUrl(): String = baseUrl
+
     suspend fun chat(messages: List<ChatMessage>): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             val url = URL("$baseUrl/api/chat")
