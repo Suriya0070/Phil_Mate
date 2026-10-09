@@ -44,17 +44,19 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
-// ── Professional dashboard palette (nothing like the patient green/colorful UI) ─
-private val NavBar   = Color(0xFF0F172A)   // very dark slate — top bar
-private val Indigo   = Color(0xFF4F46E5)   // indigo — FAB, accents
-private val BgPage   = Color(0xFFF1F5F9)   // cool light slate
-private val BgCard   = Color.White
-private val Stroke   = Color(0xFFE2E8F0)   // card borders / dividers
-private val TextPri  = Color(0xFF0F172A)   // primary text
-private val TextSec  = Color(0xFF64748B)   // secondary text
-private val GoodGrn  = Color(0xFF059669)   // emerald — taken / good
-private val WarnAmb  = Color(0xFFD97706)   // amber — pending / warning
-private val DangerRd = Color(0xFFDC2626)   // red — missed / urgent
+// ─── Dark professional palette — completely distinct from patient's light UI ──
+private val PageBg   = Color(0xFF0D1117)   // near-black page background
+private val CardBg   = Color(0xFF161B22)   // dark card surface
+private val CardBg2  = Color(0xFF21262D)   // slightly raised card
+private val BorderC  = Color(0xFF30363D)   // subtle borders
+private val NavBg    = Color(0xFF010409)   // very dark top bar
+private val TextPri  = Color(0xFFF0F6FC)   // near-white text
+private val TextSec  = Color(0xFF8B949E)   // muted text
+private val AccBlue  = Color(0xFF58A6FF)   // blue accent
+private val AccGrn   = Color(0xFF3FB950)   // green
+private val AccAmb   = Color(0xFFD29922)   // amber
+private val AccRed   = Color(0xFFF85149)   // red
+private val AccPurp  = Color(0xFFBC8CFF)   // purple (streak)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,29 +98,11 @@ fun CaregiverDashboardScreen(
         )
     }
     if (state.linkDialogVisible) {
-        LinkDialog(state.linkEmail, viewModel::onLinkEmailChanged, viewModel::linkSenior, viewModel::hideLinkDialog, state.isLoading)
-    }
-    if (state.showVoiceAlarmRecorder) {
-        VoiceDialog(
-            title = "🎙️ Record Alarm Voice", hint = "E.g. \"Thatha, medicine edunga!\"",
-            recording = recordingAlarm, saved = alarmSaved,
-            onStart = { recordingAlarm = true; VoiceAlarmManager.startRecording(context) },
-            onStop  = {
-                recordingAlarm = false
-                val f = VoiceAlarmManager.stopRecording()
-                val sid = state.seniorSnapshot?.user?.id ?: ""
-                if (f != null && sid.isNotBlank()) scope.launch {
-                    if (VoiceAlarmManager.uploadAlarmVoice(sid, f)) {
-                        VoiceAlarmManager.markAlarmVoiceSaved(context, sid); alarmSaved = true
-                    }
-                }
-            },
-            onDismiss = viewModel::hideVoiceAlarmRecorder
-        )
+        LinkDialog(state.linkEmail, viewModel::onLinkEmailChanged,
+            viewModel::linkSenior, viewModel::hideLinkDialog, state.isLoading)
     }
     if (state.showFamilyNoteRecorder) {
-        VoiceDialog(
-            title = "💌 Leave a Voice Note", hint = "E.g. \"Thatha, how are you today?\"",
+        VoiceNoteDialog(
             recording = recordingNote, saved = noteSaved,
             onStart = { recordingNote = true; VoiceAlarmManager.startRecording(context) },
             onStop  = {
@@ -151,55 +135,45 @@ fun CaregiverDashboardScreen(
             TopAppBar(
                 title = {
                     Column {
-                        Text("MediCare",
-                            fontWeight = FontWeight.Bold, fontSize = 17.sp, color = Color.White)
+                        Text("MediCare", fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp, color = TextPri)
                         Text(
                             "Caregiver Dashboard  ·  ${SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date())}",
-                            fontSize = 11.sp, color = Color.White.copy(alpha = 0.45f)
+                            fontSize = 11.sp, color = TextSec
                         )
                     }
                 },
                 actions = {
-                    // Live patient status badge in top bar
                     state.seniorSnapshot?.let { snap ->
-                        val lvl = snap.statusLevel
+                        val lc = levelColor(snap.statusLevel)
                         Surface(shape = RoundedCornerShape(20.dp),
-                            color = levelToColor(lvl).copy(alpha = 0.18f)) {
-                            Row(
-                                Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(Modifier.size(7.dp).clip(CircleShape).background(levelToColor(lvl)))
+                            color = lc.copy(alpha = 0.15f)) {
+                            Row(Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(7.dp).clip(CircleShape).background(lc))
                                 Spacer(Modifier.width(5.dp))
-                                Text(lvl.label, fontSize = 11.sp,
-                                    color = levelToColor(lvl), fontWeight = FontWeight.SemiBold)
+                                Text(snap.statusLevel.label, fontSize = 11.sp, color = lc,
+                                    fontWeight = FontWeight.SemiBold)
                             }
                         }
                         Spacer(Modifier.width(4.dp))
                     }
                     IconButton(onClick = viewModel::showLinkDialog) {
-                        Icon(Icons.Default.Add, "Link", tint = Color.White)
+                        Icon(Icons.Default.Add, "Link", tint = TextSec)
                     }
                     IconButton(onClick = onLogout) {
-                        Icon(Icons.Default.ExitToApp, "Logout", tint = Color.White)
+                        Icon(Icons.Default.ExitToApp, "Logout", tint = TextSec)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = NavBar)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = NavBg)
             )
         },
-        floatingActionButton = {
-            if (state.seniorSnapshot != null) {
-                FloatingActionButton(onClick = viewModel::showAddMedDialog, containerColor = Indigo) {
-                    Icon(Icons.Default.Add, "Add Medicine", tint = Color.White)
-                }
-            }
-        },
-        containerColor = BgPage
+        containerColor = PageBg
     ) { padding ->
 
         if (state.isLoading && state.seniorSnapshot == null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = Indigo)
+                CircularProgressIndicator(color = AccBlue)
             }
             return@Scaffold
         }
@@ -212,9 +186,10 @@ fun CaregiverDashboardScreen(
 
             state.linkSuccess?.let {
                 item {
-                    Surface(color = Color(0xFFECFDF5), shape = RoundedCornerShape(8.dp)) {
-                        Text("✅ $it", Modifier.padding(12.dp),
-                            color = GoodGrn, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    Surface(color = AccGrn.copy(alpha = 0.15f), shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, AccGrn.copy(alpha = 0.3f))) {
+                        Text("✅ $it", Modifier.padding(12.dp), color = AccGrn,
+                            fontSize = 13.sp, fontWeight = FontWeight.Medium)
                     }
                 }
             }
@@ -226,90 +201,106 @@ fun CaregiverDashboardScreen(
 
             val snap = state.seniorSnapshot!!
 
-            // ── 1. Patient overview card ──────────────────────────────────
-            item {
-                PatientOverviewCard(
-                    snap   = snap,
-                    state  = state,
-                    onSettingsTap = { onViewSeniorDetail(snap.user.id) }
-                )
-            }
+            // ── 1. Patient overview ────────────────────────────────────────
+            item { PatientOverviewCard(snap, state) }
 
-            // ── 2. Inactivity banner ──────────────────────────────────────
+            // ── 2. Inactivity alert ────────────────────────────────────────
             if (snap.inactiveMinutes > 30 && state.emergencyContactPhone.isNotBlank()) {
                 item {
-                    Surface(
-                        color = Color(0xFFFFF7ED),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, WarnAmb.copy(alpha = 0.4f))
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                    Surface(color = AccAmb.copy(alpha = 0.1f), shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, AccAmb.copy(alpha = 0.3f))) {
+                        Row(Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
                             Text("⚠️", fontSize = 16.sp)
                             Spacer(Modifier.width(8.dp))
                             Column(Modifier.weight(1f)) {
                                 Text("No activity for ${snap.inactiveMinutes} min",
-                                    fontSize = 13.sp, color = Color(0xFF92400E),
-                                    fontWeight = FontWeight.SemiBold)
-                                Text("Consider calling the patient",
-                                    fontSize = 11.sp, color = TextSec)
+                                    fontSize = 13.sp, color = AccAmb, fontWeight = FontWeight.SemiBold)
+                                Text("Consider calling the patient", fontSize = 11.sp, color = TextSec)
                             }
                             OutlinedButton(
                                 onClick = {
                                     runCatching {
                                         context.startActivity(
-                                            Intent(Intent.ACTION_CALL, Uri.parse("tel:${state.emergencyContactPhone}"))
+                                            Intent(Intent.ACTION_CALL,
+                                                Uri.parse("tel:${state.emergencyContactPhone}"))
                                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                                         )
                                     }
                                 },
-                                border = BorderStroke(1.dp, DangerRd),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = DangerRd),
+                                border = BorderStroke(1.dp, AccRed),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = AccRed),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                 modifier = Modifier.height(34.dp)
-                            ) {
-                                Text("Call Now", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
+                            ) { Text("Call Now", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                         }
                     }
                 }
             }
 
-            // ── 3. Metrics row ────────────────────────────────────────────
+            // ── 3. Metrics row ─────────────────────────────────────────────
             item {
                 val taken   = snap.todayDoses.count { it.isTaken() }
                 val missed  = snap.todayDoses.count { it.isMissed() || it.isOverdue() }
                 val pending = snap.todayDoses.size - taken - missed
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    MetricCard(Modifier.weight(1f), "$taken",    "TAKEN",   GoodGrn,  "✅")
-                    MetricCard(Modifier.weight(1f), "$pending",  "PENDING", WarnAmb,  "⏳")
-                    MetricCard(Modifier.weight(1f), "$missed",   "MISSED",  DangerRd, "❌")
-                    MetricCard(
+                    DarkMetricCard(Modifier.weight(1f), "$taken",   "TAKEN",   AccGrn,  "✅")
+                    DarkMetricCard(Modifier.weight(1f), "$pending", "PENDING", AccAmb,  "⏳")
+                    DarkMetricCard(Modifier.weight(1f), "$missed",  "MISSED",  AccRed,  "❌")
+                    DarkMetricCard(
                         Modifier.weight(1f),
                         if (state.streak > 0) "${state.streak}d" else "${snap.todayDoses.size}",
                         if (state.streak > 0) "STREAK" else "TOTAL",
-                        if (state.streak > 0) WarnAmb else Indigo,
+                        if (state.streak > 0) AccPurp else AccBlue,
                         if (state.streak > 0) "🔥" else "💊"
                     )
                 }
             }
 
-            // ── 4. Refill alerts ──────────────────────────────────────────
+            // ── 4. ALARM VOICE (inline, prominent) ─────────────────────────
+            item { DashSection("ALARM VOICE") }
+            item {
+                AlarmVoiceCard(
+                    saved     = alarmSaved,
+                    recording = recordingAlarm,
+                    onStart   = {
+                        recordingAlarm = true
+                        VoiceAlarmManager.startRecording(context)
+                    },
+                    onStop    = {
+                        recordingAlarm = false
+                        val f   = VoiceAlarmManager.stopRecording()
+                        val sid = snap.user.id
+                        if (f != null) scope.launch {
+                            if (VoiceAlarmManager.uploadAlarmVoice(sid, f)) {
+                                VoiceAlarmManager.markAlarmVoiceSaved(context, sid)
+                                alarmSaved = true
+                            }
+                        }
+                    }
+                )
+            }
+
+            // ── 5. MEDICINES (inline, prominent) ───────────────────────────
+            item { DashSection("PATIENT MEDICINES") }
+            item {
+                MedicinesCard(
+                    medications   = state.medications,
+                    onAddMedicine = viewModel::showAddMedDialog
+                )
+            }
+
+            // ── 6. Refill alerts ───────────────────────────────────────────
             val lowPillMeds = state.medications.filter { it.remainingPills in 1..5 }
             if (lowPillMeds.isNotEmpty()) {
                 item {
-                    Surface(
-                        color = Color(0xFFFFF7ED),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(1.dp, WarnAmb.copy(alpha = 0.3f))
-                    ) {
+                    Surface(color = AccAmb.copy(alpha = 0.08f), shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, AccAmb.copy(alpha = 0.25f))) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.Top) {
                             Text("💊", fontSize = 16.sp)
                             Spacer(Modifier.width(8.dp))
                             Column {
-                                Text("REFILL NEEDED", fontSize = 10.sp, color = WarnAmb,
+                                Text("REFILL NEEDED", fontSize = 10.sp, color = AccAmb,
                                     fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp)
                                 Spacer(Modifier.height(2.dp))
                                 lowPillMeds.forEach { med ->
@@ -324,48 +315,47 @@ fun CaregiverDashboardScreen(
                 }
             }
 
-            // ── 5. Today's schedule (timeline) ────────────────────────────
+            // ── 7. Today's schedule ────────────────────────────────────────
             item { DashSection("TODAY'S SCHEDULE") }
-            item { ScheduleTimeline(snap.todayDoses, state.medications) }
+            item { DarkScheduleTimeline(snap.todayDoses, state.medications) }
 
-            // ── 6. Trend chart + Recent alerts side-by-side ───────────────
+            // ── 8. Chart + Alerts side by side ─────────────────────────────
             val recentAlerts = state.alerts.filter { !it.isResolved }.take(5)
             if (state.weeklyChart.isNotEmpty() || recentAlerts.isNotEmpty()) {
                 item {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         if (state.weeklyChart.isNotEmpty()) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 DashSection("7-DAY TREND")
-                                WeeklyAdherenceChart(state.weeklyChart)
+                                DarkWeeklyChart(state.weeklyChart)
                             }
                         }
                         if (recentAlerts.isNotEmpty()) {
                             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                DashSection("RECENT ALERTS")
-                                AlertsPanel(recentAlerts)
+                                DashSection("ALERTS")
+                                DarkAlertsPanel(recentAlerts)
                             }
                         }
                     }
                 }
             }
 
-            // ── 7. Quick actions grid ─────────────────────────────────────
-            item { DashSection("QUICK ACTIONS") }
+            // ── 9. Other actions ───────────────────────────────────────────
+            item { DashSection("OTHER ACTIONS") }
             item {
-                QuickActionsGrid(
-                    onVoiceNote      = viewModel::showFamilyNoteRecorder,
-                    onAlarmVoice     = viewModel::showVoiceAlarmRecorder,
-                    onSosContact     = viewModel::showEmergencyDialog,
-                    onAddMedicine    = viewModel::showAddMedDialog,
-                    onScheduleAlarms = { viewModel.scheduleMedicationAlarms(context) },
-                    onSimulateVitals = viewModel::simulateVitals
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SmallActionCard(Modifier.weight(1f), "💌", "Voice\nNote",
+                        viewModel::showFamilyNoteRecorder)
+                    SmallActionCard(Modifier.weight(1f), "🚨", "SOS\nContact",
+                        viewModel::showEmergencyDialog)
+                    SmallActionCard(Modifier.weight(1f), "📊", "Refresh\nVitals",
+                        viewModel::simulateVitals)
+                    SmallActionCard(Modifier.weight(1f), "⏰", "Set\nAlarms",
+                        { viewModel.scheduleMedicationAlarms(context) })
+                }
             }
 
-            item { Spacer(Modifier.height(88.dp)) }
+            item { Spacer(Modifier.height(32.dp)) }
         }
     }
 }
@@ -373,35 +363,25 @@ fun CaregiverDashboardScreen(
 // ─── Patient Overview Card ────────────────────────────────────────────────────
 
 @Composable
-private fun PatientOverviewCard(
-    snap: SeniorSnapshot,
-    state: CaregiverUiState,
-    onSettingsTap: () -> Unit
-) {
-    val taken   = snap.todayDoses.count { it.isTaken() }
-    val total   = snap.todayDoses.size
-    val pct     = if (total == 0) 0f else taken.toFloat() / total
-    val lvlColor = levelToColor(snap.statusLevel)
+private fun PatientOverviewCard(snap: SeniorSnapshot, state: CaregiverUiState) {
+    val taken    = snap.todayDoses.count { it.isTaken() }
+    val total    = snap.todayDoses.size
+    val pct      = if (total == 0) 0f else taken.toFloat() / total
+    val lvlColor = levelColor(snap.statusLevel)
 
-    Surface(
-        color = BgCard, shape = RoundedCornerShape(16.dp),
-        shadowElevation = 3.dp, modifier = Modifier.fillMaxWidth()
-    ) {
+    Surface(color = CardBg, shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, BorderC), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            // Top row: avatar + info + progress ring + settings
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Avatar with live status ring
                 Box(contentAlignment = Alignment.BottomEnd) {
                     Box(
                         Modifier.size(54.dp).clip(CircleShape)
-                            .background(lvlColor.copy(alpha = 0.1f))
-                            .border(2.dp, lvlColor.copy(alpha = 0.35f), CircleShape),
+                            .background(lvlColor.copy(alpha = 0.12f))
+                            .border(2.dp, lvlColor.copy(alpha = 0.4f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) { Text("👴", fontSize = 28.sp) }
-                    Box(
-                        Modifier.size(14.dp).clip(CircleShape).background(BgCard),
-                        contentAlignment = Alignment.Center
-                    ) {
+                    Box(Modifier.size(14.dp).clip(CircleShape).background(CardBg),
+                        contentAlignment = Alignment.Center) {
                         Box(Modifier.size(10.dp).clip(CircleShape).background(lvlColor))
                     }
                 }
@@ -412,52 +392,39 @@ private fun PatientOverviewCard(
                     val lastSeen = when {
                         snap.inactiveMinutes < 1  -> "Active now"
                         snap.inactiveMinutes < 60 -> "${snap.inactiveMinutes}m ago"
-                        else                       -> "${snap.inactiveMinutes / 60}h ${snap.inactiveMinutes % 60}m ago"
+                        else -> "${snap.inactiveMinutes / 60}h ago"
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            Modifier.size(6.dp).clip(CircleShape)
-                                .background(if (snap.inactiveMinutes < 5) GoodGrn else WarnAmb)
-                        )
+                        Box(Modifier.size(6.dp).clip(CircleShape)
+                            .background(if (snap.inactiveMinutes < 5) AccGrn else AccAmb))
                         Spacer(Modifier.width(4.dp))
                         Text(lastSeen, fontSize = 12.sp,
-                            color = if (snap.inactiveMinutes > 30) DangerRd else TextSec)
+                            color = if (snap.inactiveMinutes > 30) AccRed else TextSec)
                     }
                 }
-                // Donut progress
                 Box(contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(
-                        progress = { pct },
-                        modifier = Modifier.size(52.dp),
-                        color = lvlColor,
-                        trackColor = Stroke,
-                        strokeWidth = 5.dp
+                        progress = { pct }, modifier = Modifier.size(52.dp),
+                        color = lvlColor, trackColor = BorderC, strokeWidth = 5.dp
                     )
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("$taken/$total",
-                            fontWeight = FontWeight.Bold, fontSize = 12.sp, color = TextPri)
+                        Text("$taken/$total", fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp, color = TextPri)
                         Text("doses", fontSize = 8.sp, color = TextSec)
                     }
                 }
-                Spacer(Modifier.width(6.dp))
-                IconButton(onClick = onSettingsTap, modifier = Modifier.size(32.dp)) {
-                    Icon(Icons.Default.Settings, null, tint = TextSec, modifier = Modifier.size(17.dp))
-                }
             }
-
             Spacer(Modifier.height(14.dp))
-            HorizontalDivider(color = Stroke, thickness = 0.5.dp)
+            HorizontalDivider(color = BorderC, thickness = 0.5.dp)
             Spacer(Modifier.height(12.dp))
-
-            // Vitals row
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                VitalCell(Modifier.weight(1f), "Blood Pressure", state.vitalBP)
-                Box(Modifier.width(0.5.dp).height(36.dp).align(Alignment.CenterVertically).background(Stroke))
+            Row(Modifier.fillMaxWidth()) {
+                VitalCell(Modifier.weight(1f), "BP", state.vitalBP)
+                Box(Modifier.width(0.5.dp).height(36.dp).align(Alignment.CenterVertically).background(BorderC))
                 VitalCell(Modifier.weight(1f), "Heart Rate", "${state.vitalHR} bpm")
-                Box(Modifier.width(0.5.dp).height(36.dp).align(Alignment.CenterVertically).background(Stroke))
+                Box(Modifier.width(0.5.dp).height(36.dp).align(Alignment.CenterVertically).background(BorderC))
                 VitalCell(Modifier.weight(1f), "SpO2", "${state.vitalSpO2}%")
-                Box(Modifier.width(0.5.dp).height(36.dp).align(Alignment.CenterVertically).background(Stroke))
-                VitalCell(Modifier.weight(1f), "Overall", snap.statusLevel.emoji)
+                Box(Modifier.width(0.5.dp).height(36.dp).align(Alignment.CenterVertically).background(BorderC))
+                VitalCell(Modifier.weight(1f), "Status", snap.statusLevel.emoji)
             }
         }
     }
@@ -475,47 +442,196 @@ private fun VitalCell(modifier: Modifier, label: String, value: String) {
     }
 }
 
-// ─── Metric cards ─────────────────────────────────────────────────────────────
+// ─── Dark Metric Card ─────────────────────────────────────────────────────────
 
 @Composable
-private fun MetricCard(modifier: Modifier, value: String, label: String, color: Color, icon: String) {
-    Surface(
-        modifier = modifier, shape = RoundedCornerShape(12.dp),
-        color = color.copy(alpha = 0.07f),
-        border = BorderStroke(0.5.dp, color.copy(alpha = 0.2f))
-    ) {
-        Column(
-            Modifier.padding(vertical = 12.dp, horizontal = 6.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+private fun DarkMetricCard(modifier: Modifier, value: String, label: String,
+                             color: Color, icon: String) {
+    Surface(modifier = modifier, shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.08f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.25f))) {
+        Column(Modifier.padding(vertical = 12.dp, horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally) {
             if (icon.isNotEmpty()) Text(icon, fontSize = 15.sp)
             Spacer(Modifier.height(2.dp))
             Text(value, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, color = color)
-            Text(label, fontSize = 9.sp, color = TextSec,
-                fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp,
-                textAlign = TextAlign.Center)
+            Text(label, fontSize = 9.sp, color = TextSec, fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.6.sp, textAlign = TextAlign.Center)
         }
     }
 }
 
-// ─── Schedule Timeline ────────────────────────────────────────────────────────
+// ─── Inline Alarm Voice Card ──────────────────────────────────────────────────
 
 @Composable
-private fun ScheduleTimeline(doses: List<DoseRecord>, medications: List<Medication>) {
-    val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+private fun AlarmVoiceCard(saved: Boolean, recording: Boolean,
+                            onStart: () -> Unit, onStop: () -> Unit) {
+    val borderColor = when {
+        recording -> AccRed.copy(alpha = 0.7f)
+        saved     -> AccGrn.copy(alpha = 0.5f)
+        else      -> BorderC
+    }
+    Surface(color = CardBg2, shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, borderColor), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(42.dp).clip(CircleShape).background(AccBlue.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center) { Text("🎙️", fontSize = 20.sp) }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Alarm Voice Recording", fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp, color = TextPri)
+                    Text("Your voice plays on patient's phone when medicine alarm fires",
+                        fontSize = 11.sp, color = TextSec)
+                }
+                if (saved && !recording) {
+                    Surface(shape = RoundedCornerShape(8.dp), color = AccGrn.copy(alpha = 0.12f)) {
+                        Text("✅ SAVED", Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            color = AccGrn, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            if (recording) {
+                Spacer(Modifier.height(12.dp))
+                Surface(color = AccRed.copy(alpha = 0.08f), shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, AccRed.copy(alpha = 0.3f))) {
+                    Row(Modifier.fillMaxWidth().padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center) {
+                        Box(Modifier.size(8.dp).clip(CircleShape).background(AccRed))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Recording in progress... speak clearly",
+                            color = AccRed, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            Button(
+                onClick = if (recording) onStop else onStart,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = when {
+                        recording -> AccRed; saved -> AccGrn; else -> AccBlue
+                    }
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(if (recording) Icons.Default.Close else Icons.Default.Mic, null,
+                    tint = Color.White, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    when {
+                        recording -> "Stop & Save Recording"
+                        saved     -> "Re-Record Voice"
+                        else      -> "Tap to Record Your Voice"
+                    },
+                    color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 15.sp
+                )
+            }
+            if (saved && !recording) {
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text("🔊", fontSize = 14.sp)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Voice saved — plays automatically when medicine alarm fires",
+                        fontSize = 11.sp, color = AccGrn, textAlign = TextAlign.Center)
+                }
+            }
+        }
+    }
+}
 
+// ─── Medicines Management Card ────────────────────────────────────────────────
+
+@Composable
+private fun MedicinesCard(medications: List<Medication>, onAddMedicine: () -> Unit) {
+    Surface(color = CardBg2, shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, BorderC), modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(42.dp).clip(CircleShape).background(AccBlue.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center) { Text("💊", fontSize = 20.sp) }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text("Patient Medicines", fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp, color = TextPri)
+                    Text("Add medicines here — syncs instantly to patient's screen",
+                        fontSize = 11.sp, color = TextSec)
+                }
+                Surface(shape = RoundedCornerShape(8.dp), color = AccBlue.copy(alpha = 0.12f),
+                    modifier = Modifier.clickable { onAddMedicine() }) {
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Add, null, tint = AccBlue, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Add", color = AccBlue, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+            HorizontalDivider(color = BorderC, thickness = 0.5.dp)
+            if (medications.isEmpty()) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "No medicines added yet.\nTap '+ Add' to set medicines for the patient.",
+                    fontSize = 13.sp, color = TextSec, textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(8.dp))
+            } else {
+                medications.forEach { med ->
+                    Row(Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        val dotColor = MedPalette.colorForMedication(med.pillColorHex, med.colorIndex)
+                        Box(Modifier.size(10.dp).clip(CircleShape).background(dotColor))
+                        Spacer(Modifier.width(10.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(med.name, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                                color = TextPri)
+                            Text(
+                                med.scheduleTimes.joinToString("  ·  ") +
+                                    if (med.purpose.isNotBlank()) "  ·  ${med.purpose}" else "",
+                                fontSize = 11.sp, color = TextSec,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Text(med.dosage, fontSize = 12.sp, color = AccBlue,
+                            fontWeight = FontWeight.Medium)
+                    }
+                    HorizontalDivider(color = BorderC.copy(alpha = 0.5f), thickness = 0.5.dp)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onAddMedicine,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = AccBlue),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Icon(Icons.Default.Add, null, tint = Color.White, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Add Medicine for Patient", color = Color.White,
+                    fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            }
+        }
+    }
+}
+
+// ─── Schedule Timeline (dark) ─────────────────────────────────────────────────
+
+@Composable
+private fun DarkScheduleTimeline(doses: List<DoseRecord>, medications: List<Medication>) {
+    val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
     if (doses.isEmpty()) {
-        Surface(
-            color = BgCard, shape = RoundedCornerShape(12.dp),
-            shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()
-        ) {
+        Surface(color = CardBg, shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, BorderC), modifier = Modifier.fillMaxWidth()) {
             Box(Modifier.padding(32.dp), contentAlignment = Alignment.Center) {
                 Text("No medicines scheduled today", fontSize = 13.sp, color = TextSec)
             }
         }
         return
     }
-
     data class Slot(val label: String, val icon: String, val range: IntRange)
     val slots = listOf(
         Slot("Morning",   "🌅", 6..11),
@@ -523,11 +639,8 @@ private fun ScheduleTimeline(doses: List<DoseRecord>, medications: List<Medicati
         Slot("Evening",   "🌆", 17..20),
         Slot("Night",     "🌙", 21..29)
     )
-
-    Surface(
-        color = BgCard, shape = RoundedCornerShape(12.dp),
-        shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()
-    ) {
+    Surface(color = CardBg, shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, BorderC), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
             var firstSlot = true
             for (slot in slots) {
@@ -539,41 +652,32 @@ private fun ScheduleTimeline(doses: List<DoseRecord>, medications: List<Medicati
                 if (slotDoses.isEmpty()) continue
                 if (!firstSlot) Spacer(Modifier.height(16.dp))
                 firstSlot = false
-
-                // Slot sub-header
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(slot.icon, fontSize = 14.sp)
+                    Text(slot.icon, fontSize = 13.sp)
                     Spacer(Modifier.width(6.dp))
                     Text(slot.label.uppercase(), fontSize = 10.sp, color = TextSec,
                         fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
                     Spacer(Modifier.width(8.dp))
-                    HorizontalDivider(Modifier.weight(1f), color = Stroke, thickness = 0.5.dp)
+                    HorizontalDivider(Modifier.weight(1f), color = BorderC, thickness = 0.5.dp)
                 }
                 Spacer(Modifier.height(10.dp))
-
                 slotDoses.forEachIndexed { idx, dose ->
                     val isLast = idx == slotDoses.size - 1
                     val med = medications.find { it.id == dose.medicationId }
                     val dotColor = MedPalette.colorForMedication(
                         med?.pillColorHex ?: "#4CAF50", med?.colorIndex ?: -1)
                     val (statusLabel, statusColor, statusBg) = when {
-                        dose.isTaken()                         -> Triple("TAKEN",   GoodGrn,  Color(0xFFECFDF5))
-                        dose.isMissed() || dose.isOverdue()    -> Triple("MISSED",  DangerRd, Color(0xFFFEF2F2))
-                        else                                    -> Triple("PENDING", WarnAmb,  Color(0xFFFFFBEB))
+                        dose.isTaken()                      -> Triple("TAKEN",   AccGrn, AccGrn.copy(0.12f))
+                        dose.isMissed() || dose.isOverdue() -> Triple("MISSED",  AccRed, AccRed.copy(0.12f))
+                        else                                 -> Triple("PENDING", AccAmb, AccAmb.copy(0.12f))
                     }
                     val takenTime = if (dose.isTaken() && dose.takenAt > 0)
-                        "  ·  taken at ${timeFmt.format(Date(dose.takenAt))}" else ""
-
+                        "  ·  ${timeFmt.format(Date(dose.takenAt))}" else ""
                     Row(Modifier.fillMaxWidth()) {
-                        // Timeline rail: dot + vertical line
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.width(18.dp)
-                        ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.width(18.dp)) {
                             Box(Modifier.size(10.dp).clip(CircleShape).background(dotColor))
-                            if (!isLast) Box(
-                                Modifier.width(1.5.dp).height(38.dp).background(Stroke)
-                            )
+                            if (!isLast) Box(Modifier.width(1.5.dp).height(38.dp).background(BorderC))
                         }
                         Spacer(Modifier.width(10.dp))
                         Row(
@@ -584,18 +688,14 @@ private fun ScheduleTimeline(doses: List<DoseRecord>, medications: List<Medicati
                                 Text(dose.medicationName, fontSize = 14.sp,
                                     fontWeight = FontWeight.SemiBold, color = TextPri,
                                     maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(
-                                    "${timeFmt.format(Date(dose.scheduledTime))}$takenTime",
-                                    fontSize = 11.sp, color = TextSec
-                                )
+                                Text("${timeFmt.format(Date(dose.scheduledTime))}$takenTime",
+                                    fontSize = 11.sp, color = TextSec)
                             }
-                            Surface(shape = RoundedCornerShape(6.dp), color = statusBg) {
-                                Text(
-                                    statusLabel,
-                                    Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            Surface(shape = RoundedCornerShape(6.dp), color = statusBg,
+                                border = BorderStroke(0.5.dp, statusColor.copy(0.3f))) {
+                                Text(statusLabel, Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                     fontSize = 10.sp, color = statusColor,
-                                    fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp
-                                )
+                                    fontWeight = FontWeight.Bold, letterSpacing = 0.4.sp)
                             }
                         }
                     }
@@ -605,42 +705,35 @@ private fun ScheduleTimeline(doses: List<DoseRecord>, medications: List<Medicati
     }
 }
 
-// ─── 7-Day Chart ──────────────────────────────────────────────────────────────
+// ─── Weekly Chart (dark) ──────────────────────────────────────────────────────
 
 @Composable
-private fun WeeklyAdherenceChart(data: List<DayAdherence>) {
-    Surface(color = BgCard, shape = RoundedCornerShape(12.dp),
-        shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+private fun DarkWeeklyChart(data: List<DayAdherence>) {
+    Surface(color = CardBg, shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, BorderC), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(12.dp)) {
-            Row(
-                Modifier.fillMaxWidth().height(72.dp),
+            Row(Modifier.fillMaxWidth().height(72.dp),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.Bottom
-            ) {
+                verticalAlignment = Alignment.Bottom) {
                 data.forEach { day ->
                     val pct = if (day.total == 0) 0f
                               else day.taken.toFloat() / day.total.toFloat()
                     val barColor = when {
-                        day.total == 0 -> Stroke
-                        pct >= 1f      -> GoodGrn
-                        pct >= 0.5f    -> WarnAmb
-                        else           -> DangerRd
+                        day.total == 0 -> BorderC
+                        pct >= 1f      -> AccGrn
+                        pct >= 0.5f    -> AccAmb
+                        else           -> AccRed
                     }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Bottom
-                    ) {
+                    Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Bottom) {
                         val barH = ((pct * 50).toInt().coerceAtLeast(if (day.total > 0) 3 else 2)).dp
-                        Box(
-                            Modifier.fillMaxWidth().height(barH)
-                                .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
-                                .background(barColor)
-                        )
+                        Box(Modifier.fillMaxWidth().height(barH)
+                            .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
+                            .background(barColor))
                         Spacer(Modifier.height(3.dp))
                         Text(day.dayLabel, fontSize = 8.sp, color = TextSec)
                         Text(if (day.total > 0) "${(pct * 100).toInt()}%" else "–",
-                            fontSize = 8.sp, color = if (pct >= 1f) GoodGrn else TextSec,
+                            fontSize = 8.sp, color = if (pct >= 1f) AccGrn else TextSec,
                             fontWeight = if (pct >= 1f) FontWeight.Bold else FontWeight.Normal)
                     }
                 }
@@ -649,104 +742,70 @@ private fun WeeklyAdherenceChart(data: List<DayAdherence>) {
     }
 }
 
-// ─── Alerts Panel ─────────────────────────────────────────────────────────────
+// ─── Alerts Panel (dark) ─────────────────────────────────────────────────────
 
 @Composable
-private fun AlertsPanel(alerts: List<Alert>) {
+private fun DarkAlertsPanel(alerts: List<Alert>) {
     val timeFmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    Surface(color = BgCard, shape = RoundedCornerShape(12.dp),
-        shadowElevation = 1.dp, modifier = Modifier.fillMaxWidth()) {
+    Surface(color = CardBg, shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, BorderC), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(10.dp)) {
             alerts.forEachIndexed { idx, alert ->
-                val type = alert.alertType()
+                val type  = alert.alertType()
                 val color = when (type) {
-                    AlertType.MISSED_DOSE, AlertType.MOOD_LOW -> DangerRd
-                    AlertType.INACTIVITY                      -> WarnAmb
-                    AlertType.DOSE_CONFIRMED                  -> GoodGrn
+                    AlertType.MISSED_DOSE, AlertType.MOOD_LOW -> AccRed
+                    AlertType.INACTIVITY                      -> AccAmb
+                    AlertType.DOSE_CONFIRMED                  -> AccGrn
                     else                                       -> TextSec
                 }
                 Row(Modifier.padding(vertical = 7.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(28.dp).clip(CircleShape)
-                            .background(color.copy(alpha = 0.1f)),
-                        contentAlignment = Alignment.Center
-                    ) { Text(type.emoji, fontSize = 13.sp) }
+                    Box(Modifier.size(28.dp).clip(CircleShape).background(color.copy(0.1f)),
+                        contentAlignment = Alignment.Center) {
+                        Text(type.emoji, fontSize = 13.sp)
+                    }
                     Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text(type.label, fontSize = 11.sp, color = color,
                             fontWeight = FontWeight.SemiBold, maxLines = 1)
                         Text(
-                            alert.medicationName.ifBlank {
-                                timeFmt.format(Date(alert.timestamp))
-                            },
+                            alert.medicationName.ifBlank { timeFmt.format(Date(alert.timestamp)) },
                             fontSize = 10.sp, color = TextSec, maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
-                if (idx < alerts.size - 1)
-                    HorizontalDivider(color = Stroke, thickness = 0.5.dp)
+                if (idx < alerts.size - 1) HorizontalDivider(color = BorderC, thickness = 0.5.dp)
             }
         }
     }
 }
 
-// ─── Quick Actions Grid ───────────────────────────────────────────────────────
+// ─── Small Action Card ────────────────────────────────────────────────────────
 
 @Composable
-private fun QuickActionsGrid(
-    onVoiceNote: () -> Unit, onAlarmVoice: () -> Unit, onSosContact: () -> Unit,
-    onAddMedicine: () -> Unit, onScheduleAlarms: () -> Unit, onSimulateVitals: () -> Unit
-) {
-    val actions = listOf(
-        Triple("💌", "Voice Note",    onVoiceNote),
-        Triple("🎙️", "Alarm Voice",   onAlarmVoice),
-        Triple("🚨", "SOS Contact",   onSosContact),
-        Triple("➕", "Add Medicine",  onAddMedicine),
-        Triple("⏰", "Set Alarms",    onScheduleAlarms),
-        Triple("📊", "Vitals",        onSimulateVitals)
-    )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        actions.chunked(3).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (emoji, label, onClick) ->
-                    Surface(
-                        modifier = Modifier.weight(1f).clickable { onClick() },
-                        color = BgCard, shape = RoundedCornerShape(12.dp),
-                        shadowElevation = 1.dp, border = BorderStroke(0.5.dp, Stroke)
-                    ) {
-                        Column(
-                            Modifier.padding(vertical = 16.dp, horizontal = 8.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            Text(emoji, fontSize = 24.sp)
-                            Text(label, fontSize = 10.sp, color = TextSec,
-                                fontWeight = FontWeight.SemiBold,
-                                textAlign = TextAlign.Center, maxLines = 2)
-                        }
-                    }
-                }
-                if (row.size < 3) repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
-            }
+private fun SmallActionCard(modifier: Modifier, emoji: String, label: String, onClick: () -> Unit) {
+    Surface(modifier = modifier.clickable { onClick() }, color = CardBg,
+        shape = RoundedCornerShape(12.dp), border = BorderStroke(1.dp, BorderC)) {
+        Column(Modifier.padding(vertical = 14.dp, horizontal = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(emoji, fontSize = 22.sp)
+            Text(label, fontSize = 9.sp, color = TextSec, fontWeight = FontWeight.SemiBold,
+                textAlign = TextAlign.Center, maxLines = 2)
         }
     }
 }
-
-// ─── Section label ────────────────────────────────────────────────────────────
 
 @Composable
 private fun DashSection(label: String) {
     Text(label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = TextSec,
-        letterSpacing = 1.sp, modifier = Modifier.padding(horizontal = 2.dp))
+        letterSpacing = 1.2.sp, modifier = Modifier.padding(horizontal = 2.dp))
 }
-
-// ─── No Senior Card ───────────────────────────────────────────────────────────
 
 @Composable
 private fun NoSeniorCard(onLink: () -> Unit) {
-    Surface(color = BgCard, shape = RoundedCornerShape(14.dp),
-        shadowElevation = 2.dp, modifier = Modifier.fillMaxWidth()) {
+    Surface(color = CardBg, shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(1.dp, BorderC), modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("👴", fontSize = 48.sp)
             Spacer(Modifier.height(10.dp))
@@ -757,7 +816,8 @@ private fun NoSeniorCard(onLink: () -> Unit) {
                 fontSize = 13.sp, color = TextSec, textAlign = TextAlign.Center)
             Spacer(Modifier.height(18.dp))
             Button(onClick = onLink, modifier = Modifier.fillMaxWidth().height(46.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Indigo)) {
+                colors = ButtonDefaults.buttonColors(containerColor = AccBlue),
+                shape = RoundedCornerShape(10.dp)) {
                 Icon(Icons.Default.Add, null, tint = Color.White)
                 Spacer(Modifier.width(6.dp))
                 Text("Link Family Member", color = Color.White, fontWeight = FontWeight.SemiBold)
@@ -766,101 +826,103 @@ private fun NoSeniorCard(onLink: () -> Unit) {
     }
 }
 
-// ─── Dialogs (unchanged logic) ────────────────────────────────────────────────
+// ─── Dialogs ──────────────────────────────────────────────────────────────────
 
 @Composable
-private fun VoiceDialog(
-    title: String, hint: String, recording: Boolean, saved: Boolean,
-    onStart: () -> Unit, onStop: () -> Unit, onDismiss: () -> Unit
-) {
+private fun VoiceNoteDialog(recording: Boolean, saved: Boolean,
+                             onStart: () -> Unit, onStop: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+        onDismissRequest = onDismiss, containerColor = CardBg2,
+        title = { Text("💌 Voice Note for Patient", fontWeight = FontWeight.SemiBold,
+            fontSize = 15.sp, color = TextPri) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Plays for the patient when needed.", fontSize = 12.sp, color = TextSec)
-                Text(hint, fontSize = 12.sp, color = Indigo, fontStyle = FontStyle.Italic)
-                if (saved) Text("✅ Saved!", color = GoodGrn,
+                Text("Plays for the patient when they need encouragement.",
+                    fontSize = 12.sp, color = TextSec)
+                Text("E.g. \"Thatha, how are you today?\"",
+                    fontSize = 12.sp, color = AccBlue, fontStyle = FontStyle.Italic)
+                if (saved) Text("✅ Note saved!", color = AccGrn,
                     fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Button(
                     onClick = if (recording) onStop else onStart,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = if (recording) DangerRd else Indigo),
+                        containerColor = if (recording) AccRed else AccBlue),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(if (recording) Icons.Default.Close else Icons.Default.Mic,
-                        null, tint = Color.White)
+                    Icon(if (recording) Icons.Default.Close else Icons.Default.Mic, null,
+                        tint = Color.White)
                     Spacer(Modifier.width(6.dp))
                     Text(if (recording) "Stop & Save" else "Start Recording",
                         color = Color.White, fontWeight = FontWeight.SemiBold)
                 }
-                if (recording) Text("● Recording...", color = DangerRd, fontSize = 12.sp)
+                if (recording) Text("● Recording...", color = AccRed, fontSize = 12.sp)
             }
         },
         confirmButton = {},
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Close", fontSize = 13.sp) } }
+        dismissButton = { TextButton(onClick = onDismiss) {
+            Text("Close", color = TextSec, fontSize = 13.sp) } }
     )
 }
 
 @Composable
-private fun EmergencyDialog(
-    name: String, phone: String,
-    onSave: (String, String) -> Unit, onDismiss: () -> Unit
-) {
+private fun EmergencyDialog(name: String, phone: String,
+                             onSave: (String, String) -> Unit, onDismiss: () -> Unit) {
     var n by remember { mutableStateOf(name) }
     var p by remember { mutableStateOf(phone) }
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Emergency Contact", fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+        onDismissRequest = onDismiss, containerColor = CardBg2,
+        title = { Text("Emergency Contact", fontWeight = FontWeight.SemiBold,
+            fontSize = 15.sp, color = TextPri) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Called automatically if patient is inactive for 30+ min.",
                     fontSize = 12.sp, color = TextSec)
-                OutlinedTextField(n, { n = it }, label = { Text("Name", fontSize = 13.sp) },
+                OutlinedTextField(n, { n = it }, label = { Text("Name", color = TextSec) },
+                    textStyle = LocalTextStyle.current.copy(color = TextPri),
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(p, { p = it }, label = { Text("Phone", fontSize = 13.sp) },
+                OutlinedTextField(p, { p = it }, label = { Text("Phone", color = TextSec) },
+                    textStyle = LocalTextStyle.current.copy(color = TextPri),
                     modifier = Modifier.fillMaxWidth(), singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(n, p) },
-                colors = ButtonDefaults.buttonColors(containerColor = Indigo),
-                enabled = p.isNotBlank()) {
+            Button(onClick = { onSave(n, p) }, enabled = p.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = AccBlue)) {
                 Text("Save", color = Color.White, fontWeight = FontWeight.SemiBold)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSec) } }
     )
 }
 
 @Composable
-private fun LinkDialog(
-    email: String, onChange: (String) -> Unit,
-    onLink: () -> Unit, onDismiss: () -> Unit, loading: Boolean
-) {
+private fun LinkDialog(email: String, onChange: (String) -> Unit,
+                       onLink: () -> Unit, onDismiss: () -> Unit, loading: Boolean) {
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Link Patient", fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+        onDismissRequest = onDismiss, containerColor = CardBg2,
+        title = { Text("Link Patient", fontWeight = FontWeight.SemiBold,
+            fontSize = 15.sp, color = TextPri) },
         text = {
             Column {
                 Text("Enter the patient's account email.", fontSize = 12.sp, color = TextSec)
                 Spacer(Modifier.height(10.dp))
-                OutlinedTextField(email, onChange, label = { Text("Email", fontSize = 13.sp) },
+                OutlinedTextField(email, onChange, label = { Text("Email", color = TextSec) },
+                    textStyle = LocalTextStyle.current.copy(color = TextPri),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
             }
         },
         confirmButton = {
             Button(onClick = onLink, enabled = email.isNotBlank() && !loading,
-                colors = ButtonDefaults.buttonColors(containerColor = Indigo)) {
+                colors = ButtonDefaults.buttonColors(containerColor = AccBlue)) {
                 if (loading) CircularProgressIndicator(color = Color.White,
                     modifier = Modifier.size(16.dp))
                 else Text("Link", color = Color.White, fontWeight = FontWeight.SemiBold)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSec) } }
     )
 }
 
@@ -876,33 +938,39 @@ private fun AddMedicineDialog(
         mutableStateMapOf("07:00" to false, "13:00" to false, "18:00" to false, "21:00" to false)
     }
     val slotLabels = linkedMapOf(
-        "07:00" to "🌅 Morning",
-        "13:00" to "☀️ Afternoon",
-        "18:00" to "🌆 Evening",
-        "21:00" to "🌙 Night"
+        "07:00" to "🌅 Morning    7:00 AM",
+        "13:00" to "☀️ Afternoon  1:00 PM",
+        "18:00" to "🌆 Evening    6:00 PM",
+        "21:00" to "🌙 Night      9:00 PM"
     )
     AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Add Medicine", fontWeight = FontWeight.SemiBold, fontSize = 15.sp) },
+        onDismissRequest = onDismiss, containerColor = CardBg2,
+        title = { Text("Add Medicine for Patient", fontWeight = FontWeight.SemiBold,
+            fontSize = 15.sp, color = TextPri) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { name = it },
-                    label = { Text("Medicine Name", fontSize = 13.sp) },
+                    label = { Text("Medicine Name", color = TextSec) },
+                    textStyle = LocalTextStyle.current.copy(color = TextPri),
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(purpose, { purpose = it },
-                    label = { Text("Purpose / Condition", fontSize = 13.sp) },
+                    label = { Text("Purpose / Condition", color = TextSec) },
+                    textStyle = LocalTextStyle.current.copy(color = TextPri),
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(dosage, { dosage = it },
-                    label = { Text("Dosage (e.g. 1 tab)", fontSize = 13.sp) },
+                    label = { Text("Dosage  (e.g. 1 tab, 5ml)", color = TextSec) },
+                    textStyle = LocalTextStyle.current.copy(color = TextPri),
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
-                Text("Schedule:", fontSize = 13.sp, color = TextSec,
+                Text("When to give:", fontSize = 13.sp, color = TextSec,
                     fontWeight = FontWeight.Medium)
                 slotLabels.forEach { (time, label) ->
                     Row(verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.fillMaxWidth()) {
                         Checkbox(checked = slots[time] == true,
-                            onCheckedChange = { slots[time] = it })
-                        Text(label, fontSize = 13.sp)
+                            onCheckedChange = { slots[time] = it },
+                            colors = CheckboxDefaults.colors(
+                                checkedColor = AccBlue, uncheckedColor = TextSec))
+                        Text(label, fontSize = 13.sp, color = TextPri)
                     }
                 }
             }
@@ -915,19 +983,19 @@ private fun AddMedicineDialog(
                         onAdd(name.trim(), purpose.trim(), dosage.trim(), times.toList())
                 },
                 enabled = name.isNotBlank() && slots.any { it.value },
-                colors = ButtonDefaults.buttonColors(containerColor = Indigo)
-            ) { Text("Add", color = Color.White, fontWeight = FontWeight.SemiBold) }
+                colors = ButtonDefaults.buttonColors(containerColor = AccBlue)
+            ) { Text("Add Medicine", color = Color.White, fontWeight = FontWeight.SemiBold) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSec) } }
     )
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-private fun levelToColor(level: SeniorStatusLevel): Color = when (level) {
-    SeniorStatusLevel.GREEN -> GoodGrn
-    SeniorStatusLevel.AMBER -> WarnAmb
-    SeniorStatusLevel.RED   -> DangerRd
+private fun levelColor(level: SeniorStatusLevel): Color = when (level) {
+    SeniorStatusLevel.GREEN -> AccGrn
+    SeniorStatusLevel.AMBER -> AccAmb
+    SeniorStatusLevel.RED   -> AccRed
 }
 
 private fun showMissedDoseNotification(context: Context, medName: String) {

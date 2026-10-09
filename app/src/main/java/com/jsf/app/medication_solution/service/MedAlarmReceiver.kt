@@ -11,12 +11,17 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.jsf.app.medication_solution.MainActivity
 import com.jsf.app.medication_solution.MedApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 class MedAlarmReceiver : BroadcastReceiver() {
 
     override fun onReceive(context: Context, intent: Intent) {
-        val medName    = intent.getStringExtra("medName")    ?: return
-        val seniorId   = intent.getStringExtra("seniorId")   ?: return
+        val medName     = intent.getStringExtra("medName")    ?: return
+        val seniorId    = intent.getStringExtra("seniorId")   ?: return
         val triggerType = intent.getStringExtra("triggerType") ?: "MEDICATION"
 
         AutoStartManager.pendingTrigger = AutoStartManager.AlarmTrigger(
@@ -26,7 +31,17 @@ class MedAlarmReceiver : BroadcastReceiver() {
         showNotification(context, medName, triggerType)
 
         if (triggerType == "MEDICATION") {
+            // 1. Tamil TTS announcement
             TtsHelper.speak(context, "$medName எடுக்க வேண்டிய நேரம் வந்தது!")
+
+            // 2. Play caregiver's recorded voice after TTS (3-second gap)
+            if (VoiceAlarmManager.isAlarmVoiceSaved(context, seniorId)) {
+                CoroutineScope(Dispatchers.IO + SupervisorJob()).launch {
+                    delay(3_000L)
+                    VoiceAlarmManager.downloadAndPlay(context, seniorId)
+                }
+            }
+
             callFamilyNumber(context)
             scheduleVerificationCall(context, medName, seniorId)
         }
