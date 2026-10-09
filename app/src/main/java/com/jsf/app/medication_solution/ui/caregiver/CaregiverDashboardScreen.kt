@@ -130,6 +130,21 @@ fun CaregiverDashboardScreen(
         )
     }
 
+    // Force dark theme — overrides the app-wide lightColorScheme so caregiver UI is always dark
+    MaterialTheme(
+        colorScheme = darkColorScheme(
+            background  = PageBg,
+            surface     = CardBg,
+            surfaceVariant = CardBg2,
+            primary     = AccBlue,
+            secondary   = AccGrn,
+            error       = AccRed,
+            onBackground = TextPri,
+            onSurface    = TextPri,
+            onPrimary    = Color.White
+        )
+    ) {
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -358,6 +373,7 @@ fun CaregiverDashboardScreen(
             item { Spacer(Modifier.height(32.dp)) }
         }
     }
+    } // end MaterialTheme dark wrapper
 }
 
 // ─── Patient Overview Card ────────────────────────────────────────────────────
