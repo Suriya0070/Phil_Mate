@@ -1,7 +1,6 @@
 package com.jsf.app.medication_solution.data.repository
 
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.jsf.app.medication_solution.data.model.Alert
 import com.jsf.app.medication_solution.data.model.AlertSeverity
 import com.jsf.app.medication_solution.data.model.AlertType
@@ -29,12 +28,11 @@ class MedicationRepository {
     fun getMedicationsForSenior(seniorId: String): Flow<List<Medication>> = callbackFlow {
         val listener = db.collection("medications")
             .whereEqualTo("seniorId", seniorId)
-            .whereEqualTo("active", true)
             .addSnapshotListener { snap, err ->
                 if (err != null) { close(err); return@addSnapshotListener }
                 trySend(snap?.documents?.mapNotNull {
                     it.toObject(Medication::class.java)?.copy(id = it.id)
-                } ?: emptyList())
+                }?.filter { it.isActive } ?: emptyList())
             }
         awaitClose { listener.remove() }
     }
@@ -56,13 +54,11 @@ class MedicationRepository {
     fun getAlertsForSenior(seniorId: String): Flow<List<Alert>> = callbackFlow {
         val listener = db.collection("alerts")
             .whereEqualTo("seniorId", seniorId)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(30)
             .addSnapshotListener { snap, err ->
                 if (err != null) { close(err); return@addSnapshotListener }
                 trySend(snap?.documents?.mapNotNull {
                     it.toObject(Alert::class.java)?.copy(id = it.id)
-                } ?: emptyList())
+                }?.sortedByDescending { it.timestamp }?.take(30) ?: emptyList())
             }
         awaitClose { listener.remove() }
     }
@@ -70,13 +66,11 @@ class MedicationRepository {
     fun getMoodHistory(seniorId: String): Flow<List<MoodRecord>> = callbackFlow {
         val listener = db.collection("moodRecords")
             .whereEqualTo("seniorId", seniorId)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(10)
             .addSnapshotListener { snap, err ->
                 if (err != null) { close(err); return@addSnapshotListener }
                 trySend(snap?.documents?.mapNotNull {
                     it.toObject(MoodRecord::class.java)?.copy(id = it.id)
-                } ?: emptyList())
+                }?.sortedByDescending { it.timestamp }?.take(14) ?: emptyList())
             }
         awaitClose { listener.remove() }
     }
@@ -177,11 +171,11 @@ class MedicationRepository {
             val snap = db.collection("doseRecords")
                 .whereEqualTo("seniorId", seniorId)
                 .whereEqualTo("date", today)
-                .whereEqualTo("status", DoseStatus.PENDING.name)
                 .get().await()
             val batch = db.batch()
             for (doc in snap.documents) {
                 val record = doc.toObject(DoseRecord::class.java) ?: continue
+                if (record.status != DoseStatus.PENDING.name) continue
                 if (now - record.scheduledTime > 45 * 60 * 1000L) {
                     batch.update(doc.reference, "status", DoseStatus.MISSED.name)
                     createAlert(
@@ -368,13 +362,11 @@ class MedicationRepository {
     fun getConversationReports(seniorId: String): Flow<List<ConversationReport>> = callbackFlow {
         val listener = db.collection("conversationReports")
             .whereEqualTo("seniorId", seniorId)
-            .orderBy("startTime", Query.Direction.DESCENDING)
-            .limit(20)
             .addSnapshotListener { snap, err ->
                 if (err != null) { close(err); return@addSnapshotListener }
                 trySend(snap?.documents?.mapNotNull {
                     it.toObject(ConversationReport::class.java)?.copy(id = it.id)
-                } ?: emptyList())
+                }?.sortedByDescending { it.startTime }?.take(20) ?: emptyList())
             }
         awaitClose { listener.remove() }
     }

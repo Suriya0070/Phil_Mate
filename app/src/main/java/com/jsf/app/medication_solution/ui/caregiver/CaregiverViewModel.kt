@@ -12,6 +12,7 @@ import com.jsf.app.medication_solution.data.model.MoodRecord
 import com.jsf.app.medication_solution.data.model.User
 import com.jsf.app.medication_solution.data.repository.AuthRepository
 import com.jsf.app.medication_solution.data.repository.CaregiverRepository
+import com.jsf.app.medication_solution.data.repository.MedicationRepository
 import com.jsf.app.medication_solution.data.repository.DayAdherence
 import com.jsf.app.medication_solution.service.AlarmScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,6 +68,7 @@ data class CaregiverUiState(
 class CaregiverViewModel : ViewModel() {
     private val authRepo = AuthRepository()
     private val caregiverRepo = CaregiverRepository()
+    private val medRepo = MedicationRepository()
     private val seenAlertIds = mutableSetOf<String>()
 
     private val _state = MutableStateFlow(CaregiverUiState())
@@ -260,7 +262,10 @@ class CaregiverViewModel : ViewModel() {
         )
         viewModelScope.launch {
             caregiverRepo.addMedicationForSenior(med)
-                .onSuccess { _state.value = _state.value.copy(showAddMedDialog = false) }
+                .onSuccess { newId ->
+                    _state.value = _state.value.copy(showAddMedDialog = false)
+                    medRepo.createDoseRecordsForToday(seniorId, listOf(med.copy(id = newId)))
+                }
                 .onFailure { _state.value = _state.value.copy(error = it.message) }
         }
     }

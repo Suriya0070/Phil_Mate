@@ -59,9 +59,10 @@ class AuthRepository {
         runCatching {
             val query = db.collection("users")
                 .whereEqualTo("email", seniorEmail)
-                .whereEqualTo("role", UserRole.SENIOR.name)
                 .get().await()
-            val seniorDoc = query.documents.firstOrNull() ?: error("Senior not found with that email")
+            val seniorDoc = query.documents.firstOrNull {
+                it.getString("role") == UserRole.SENIOR.name
+            } ?: error("Senior not found with that email")
             val seniorId = seniorDoc.id
             db.collection("users").document(caregiverId)
                 .update("linkedSeniorId", seniorId).await()

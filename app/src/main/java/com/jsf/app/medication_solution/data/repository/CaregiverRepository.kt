@@ -1,7 +1,6 @@
 package com.jsf.app.medication_solution.data.repository
 
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.jsf.app.medication_solution.data.model.Alert
 import com.jsf.app.medication_solution.data.model.ConversationReport
 import com.jsf.app.medication_solution.data.model.DoseRecord
@@ -50,13 +49,11 @@ class CaregiverRepository {
     fun observeAlerts(seniorId: String): Flow<List<Alert>> = callbackFlow {
         val listener = db.collection("alerts")
             .whereEqualTo("seniorId", seniorId)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(20)
             .addSnapshotListener { snap, err ->
                 if (err != null) { close(err); return@addSnapshotListener }
                 trySend(snap?.documents?.mapNotNull {
                     it.toObject(Alert::class.java)?.copy(id = it.id)
-                } ?: emptyList())
+                }?.sortedByDescending { it.timestamp }?.take(20) ?: emptyList())
             }
         awaitClose { listener.remove() }
     }
@@ -64,13 +61,11 @@ class CaregiverRepository {
     fun observeMoodHistory(seniorId: String): Flow<List<MoodRecord>> = callbackFlow {
         val listener = db.collection("moodRecords")
             .whereEqualTo("seniorId", seniorId)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
-            .limit(7)
             .addSnapshotListener { snap, err ->
                 if (err != null) { close(err); return@addSnapshotListener }
                 trySend(snap?.documents?.mapNotNull {
                     it.toObject(MoodRecord::class.java)?.copy(id = it.id)
-                } ?: emptyList())
+                }?.sortedByDescending { it.timestamp }?.take(7) ?: emptyList())
             }
         awaitClose { listener.remove() }
     }
@@ -104,12 +99,11 @@ class CaregiverRepository {
     fun getMedicationsForSenior(seniorId: String): Flow<List<Medication>> = callbackFlow {
         val listener = db.collection("medications")
             .whereEqualTo("seniorId", seniorId)
-            .whereEqualTo("active", true)
             .addSnapshotListener { snap, err ->
                 if (err != null) { close(err); return@addSnapshotListener }
                 trySend(snap?.documents?.mapNotNull {
                     it.toObject(Medication::class.java)?.copy(id = it.id)
-                } ?: emptyList())
+                }?.filter { it.isActive } ?: emptyList())
             }
         awaitClose { listener.remove() }
     }
@@ -117,13 +111,11 @@ class CaregiverRepository {
     fun observeConversationReports(seniorId: String): Flow<List<ConversationReport>> = callbackFlow {
         val listener = db.collection("conversationReports")
             .whereEqualTo("seniorId", seniorId)
-            .orderBy("startTime", Query.Direction.DESCENDING)
-            .limit(10)
             .addSnapshotListener { snap, err ->
                 if (err != null) { close(err); return@addSnapshotListener }
                 trySend(snap?.documents?.mapNotNull {
                     it.toObject(ConversationReport::class.java)?.copy(id = it.id)
-                } ?: emptyList())
+                }?.sortedByDescending { it.startTime }?.take(10) ?: emptyList())
             }
         awaitClose { listener.remove() }
     }

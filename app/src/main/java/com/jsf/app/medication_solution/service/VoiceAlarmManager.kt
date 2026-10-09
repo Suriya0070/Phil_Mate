@@ -107,4 +107,44 @@ object VoiceAlarmManager {
         context.getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
             .edit().putBoolean("note_saved_$seniorId", true).apply()
     }
+
+    // ── Per-medicine audio ────────────────────────────────────────────────────
+
+    suspend fun uploadMedicineAudio(seniorId: String, medicationId: String, file: File): Boolean {
+        return runCatching {
+            val ref = FirebaseStorage.getInstance().reference
+                .child("medicineAudio/$seniorId/$medicationId.mp4")
+            ref.putFile(Uri.fromFile(file)).await()
+            true
+        }.getOrDefault(false)
+    }
+
+    suspend fun downloadAndPlayMedicineAudio(context: Context, seniorId: String, medicationId: String) {
+        // Try medicine-specific audio first, fall back to global alarm
+        val medRef = FirebaseStorage.getInstance().reference
+            .child("medicineAudio/$seniorId/$medicationId.mp4")
+        val globalRef = FirebaseStorage.getInstance().reference
+            .child("alarms/$seniorId/family_alarm.mp4")
+        runCatching {
+            val localFile = File(context.cacheDir, "med_audio_$medicationId.mp4")
+            val ref = runCatching { medRef.metadata.await(); medRef }.getOrDefault(globalRef)
+            ref.getFile(localFile).await()
+            player?.release()
+            player = MediaPlayer().apply {
+                setDataSource(localFile.absolutePath)
+                isLooping = true
+                prepare()
+                start()
+            }
+        }
+    }
+
+    fun isMedicineAudioSaved(context: Context, seniorId: String, medicationId: String): Boolean =
+        context.getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+            .getBoolean("med_audio_${seniorId}_$medicationId", false)
+
+    fun markMedicineAudioSaved(context: Context, seniorId: String, medicationId: String) {
+        context.getSharedPreferences("alarm_prefs", Context.MODE_PRIVATE)
+            .edit().putBoolean("med_audio_${seniorId}_$medicationId", true).apply()
+    }
 }

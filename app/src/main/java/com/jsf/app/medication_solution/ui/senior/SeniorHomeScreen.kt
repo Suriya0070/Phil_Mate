@@ -14,6 +14,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -36,6 +38,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.res.painterResource
+import com.jsf.app.medication_solution.R
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -75,6 +80,7 @@ fun SeniorHomeScreen(
     val (taken, total) = viewModel.getAdherenceToday()
     val context = LocalContext.current
     val ts = state.textSizePref.scale
+    var selectedTab by remember { mutableStateOf(0) }
 
     // Direct SpeechRecognizer — no dialog, no manual input needed
     var isListening by remember { mutableStateOf(false) }
@@ -151,6 +157,24 @@ fun SeniorHomeScreen(
     }
 
     Scaffold(
+        bottomBar = {
+            NavigationBar(containerColor = Color.White, tonalElevation = 4.dp) {
+                NavigationBarItem(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    icon = { Icon(Icons.Default.Home, contentDescription = "Home", tint = if (selectedTab == 0) MedGreen else Color.Gray) },
+                    label = { Text("Home", fontSize = (11 * ts).sp, color = if (selectedTab == 0) MedGreen else Color.Gray) },
+                    colors = NavigationBarItemDefaults.colors(indicatorColor = MedGreen.copy(alpha = 0.15f))
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    icon = { Text("💊", fontSize = 20.sp) },
+                    label = { Text("Pill Vault", fontSize = (11 * ts).sp, color = if (selectedTab == 1) MedGreen else Color.Gray) },
+                    colors = NavigationBarItemDefaults.colors(indicatorColor = MedGreen.copy(alpha = 0.15f))
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -217,6 +241,10 @@ fun SeniorHomeScreen(
             )
         }
     ) { padding ->
+        if (selectedTab == 1) {
+            PillVaultScreen(state = state, ts = ts, modifier = Modifier.fillMaxSize().padding(padding))
+            return@Scaffold
+        }
         if (state.isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = MedGreen, strokeWidth = 4.dp, modifier = Modifier.size(56.dp))
@@ -275,7 +303,8 @@ fun SeniorHomeScreen(
                 SmartMedicineBoxCard(
                     state = state,
                     onStripPicked = viewModel::onMedicineStripPicked,
-                    currentSlotMeds = viewModel.getCurrentSlotMeds()
+                    allMedications = state.medications,
+                    activeSlotLabel = viewModel.activeSlotLabel()
                 )
             }
 
@@ -738,22 +767,32 @@ private fun MedicineTile(
 ) {
     val context  = LocalContext.current
     val medColor = MedPalette.colorForMedication(medication?.pillColorHex ?: "#4CAF50", medication?.colorIndex ?: -1)
-    val textColor = MedPalette.contrastTextColor(medColor)
     val isTaken = dose.isTaken()
     val isMissed = dose.isMissed()
     val isOverdue = dose.isOverdue()
     val timeFmt = remember { SimpleDateFormat("h:mm a", Locale.getDefault()) }
+    var expandedPhotoIdx by remember { mutableStateOf(-1) }
+
+    val cardBg = when {
+        isMissed -> Color(0xFFFFF0F0)
+        isTaken  -> Color(0xFFF8F8F8)
+        else     -> Color.White
+    }
+    val borderColor = when {
+        isMissed -> Color(0xFFEF9A9A)
+        isTaken  -> medColor.copy(alpha = 0.35f)
+        else     -> medColor
+    }
 
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = when {
-            isTaken -> Color(0xFFF5F5F5)
-            isMissed -> Color(0xFFFFEBEE)
-            else -> medColor
-        }),
+        colors = CardDefaults.cardColors(containerColor = cardBg),
         shape = RoundedCornerShape(22.dp),
-        elevation = CardDefaults.cardElevation(if (isTaken || isMissed) 0.dp else 5.dp)
+        elevation = CardDefaults.cardElevation(if (isTaken || isMissed) 1.dp else 4.dp),
+        border = BorderStroke(2.dp, borderColor)
     ) {
+        // Colored top accent strip
+        Box(Modifier.fillMaxWidth().height(5.dp).background(borderColor))
         Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Row(modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -764,7 +803,7 @@ private fun MedicineTile(
                         modifier = Modifier.size((36 * ts.coerceIn(1f, 1.3f)).dp).clip(RoundedCornerShape(8.dp)))
                 } else {
                     TabletShapeIcon(
-                        color = if (isTaken || isMissed) medColor.copy(alpha = 0.25f) else Color.White.copy(alpha = 0.3f),
+                        color = medColor.copy(alpha = if (isTaken || isMissed) 0.3f else 1f),
                         shape = medication?.shape ?: "circle",
                         size = (32 * ts.coerceIn(1f, 1.3f)).dp
                     )
@@ -776,22 +815,99 @@ private fun MedicineTile(
             Text(dose.medicationName,
                 fontWeight = FontWeight.ExtraBold,
                 fontSize = (21 * ts).sp,
-                color = if (isTaken || isMissed) medColor else textColor,
+                color = if (isTaken || isMissed) Color(0xFF757575) else medColor,
                 maxLines = 2)
 
             if (medication?.purpose?.isNotBlank() == true) {
                 Text(medication.purpose.substringBefore("(").trim(),
                     fontSize = (12 * ts).sp,
-                    color = if (isTaken || isMissed) Color.Gray else textColor.copy(alpha = 0.82f),
+                    color = Color(0xFF546E7A),
                     maxLines = 2)
             }
 
             Text(timeFmt.format(Date(dose.scheduledTime)),
                 fontSize = (12 * ts).sp,
                 fontWeight = FontWeight.Medium,
-                color = if (isTaken || isMissed) Color.Gray else textColor.copy(alpha = 0.75f))
+                color = Color(0xFF90A4AE))
 
-            Spacer(Modifier.height(2.dp))
+            Spacer(Modifier.height(4.dp))
+
+            // Tablet photo thumbnails — real photos for known medicines
+            val medName = dose.medicationName.lowercase()
+            val photoRes: List<Pair<String, Int?>> = when {
+                medName.contains("dolo") -> listOf("Front" to R.drawable.med_dolo_front, "Back" to R.drawable.med_dolo_back)
+                medName.contains("pan")  -> listOf("Front" to R.drawable.med_pan_front,  "Back" to R.drawable.med_pan_back)
+                medName.contains("telma") -> listOf("Front" to R.drawable.med_telma_front, "Back" to R.drawable.med_telma_back)
+                else -> listOf("Front" to null, "Back" to null)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                photoRes.forEachIndexed { idx, (label, resId) ->
+                    val isSelected = expandedPhotoIdx == idx
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (isSelected)
+                            Color.White.copy(alpha = if (isTaken || isMissed) 0.3f else 0.45f)
+                        else
+                            Color.White.copy(alpha = if (isTaken || isMissed) 0.1f else 0.2f),
+                        modifier = Modifier.weight(1f).clickable { expandedPhotoIdx = if (isSelected) -1 else idx }
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(4.dp)) {
+                            if (resId != null) {
+                                androidx.compose.foundation.Image(
+                                    painter = painterResource(resId),
+                                    contentDescription = label,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.size((30 * ts.coerceIn(1f, 1.3f)).dp).clip(RoundedCornerShape(4.dp))
+                                        .alpha(if (isTaken || isMissed) 0.45f else 1f)
+                                )
+                            } else {
+                                TabletShapeIcon(
+                                    color = if (isTaken || isMissed) medColor.copy(alpha = 0.3f) else medColor.copy(alpha = 0.85f),
+                                    shape = medication?.shape ?: "circle",
+                                    size = (18 * ts.coerceIn(1f, 1.3f)).dp
+                                )
+                            }
+                            Text(label, fontSize = (7 * ts).sp,
+                                color = Color(0xFF90A4AE),
+                                textAlign = TextAlign.Center, maxLines = 1)
+                        }
+                    }
+                }
+            }
+            AnimatedVisibility(visible = expandedPhotoIdx >= 0) {
+                val safeIdx = expandedPhotoIdx.coerceAtLeast(0)
+                val (exLabel, exResId) = photoRes[safeIdx]
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (isTaken || isMissed) medColor.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.22f),
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp)
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(10.dp)) {
+                        if (exResId != null) {
+                            androidx.compose.foundation.Image(
+                                painter = painterResource(exResId),
+                                contentDescription = exLabel,
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height((120 * ts.coerceIn(1f, 1.3f)).dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .alpha(if (isTaken || isMissed) 0.55f else 1f)
+                            )
+                        } else {
+                            TabletShapeIcon(
+                                color = if (isTaken || isMissed) medColor.copy(alpha = 0.3f) else medColor,
+                                shape = medication?.shape ?: "circle",
+                                size = (52 * ts.coerceIn(1f, 1.3f)).dp
+                            )
+                        }
+                        Spacer(Modifier.height(4.dp))
+                        Text("$exLabel", fontSize = (11 * ts).sp,
+                            color = medColor,
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
 
             if (!isTaken && !isMissed) {
                 Button(
@@ -800,13 +916,12 @@ private fun MedicineTile(
                         onConfirm()
                     },
                     modifier = Modifier.fillMaxWidth().height((52 * ts.coerceIn(1f, 1.3f)).dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color.White.copy(alpha = 0.28f)),
+                    colors = ButtonDefaults.buttonColors(containerColor = medColor),
                     shape = RoundedCornerShape(14.dp),
-                    contentPadding = PaddingValues(4.dp),
-                    elevation = ButtonDefaults.buttonElevation(0.dp)
+                    contentPadding = PaddingValues(4.dp)
                 ) {
                     Text("✅ எடுத்தேன்!", fontSize = (15 * ts).sp,
-                        fontWeight = FontWeight.ExtraBold, color = textColor)
+                        fontWeight = FontWeight.ExtraBold, color = Color.White)
                 }
             } else {
                 Box(
@@ -817,7 +932,7 @@ private fun MedicineTile(
                 ) {
                     Text(if (isTaken) "எடுத்துவிட்டீர்கள்" else "தவறிவிட்டீர்கள்",
                         fontSize = (12 * ts).sp, fontWeight = FontWeight.Bold,
-                        color = if (isTaken) medColor else Color.Red)
+                        color = if (isTaken) medColor else Color(0xFFD32F2F))
                 }
             }
         }
@@ -852,12 +967,13 @@ private fun ScheduledMedicineRow(medication: Medication, times: List<String>, ts
 // ─── Smart Box Card ───────────────────────────────────────────────────────────
 
 @Composable
-private fun SmartMedicineBoxCard(state: SeniorUiState, currentSlotMeds: List<Medication>, onStripPicked: (String) -> Unit) {
+private fun SmartMedicineBoxCard(state: SeniorUiState, allMedications: List<Medication>, onStripPicked: (String) -> Unit, activeSlotLabel: String = "") {
     val context = LocalContext.current
-    val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
-    val slotName = when (hour) { in 6..11 -> "🌅 Morning"; in 12..16 -> "☀️ Afternoon"; in 17..20 -> "🌆 Evening"; else -> "🌙 Night" }
     val ledColor = when (state.boxLedStatus) { LedStatus.GREEN -> Color(0xFF4CAF50); LedStatus.RED -> Color(0xFFF44336); LedStatus.NONE -> Color(0xFF9E9E9E) }
     val ledAlpha by rememberInfiniteTransition(label = "led").animateFloat(0.5f, 1f, infiniteRepeatable(tween(600), RepeatMode.Reverse), label = "a")
+    var checkingMedId by remember { mutableStateOf<String?>(null) }
+    val stripPulse by rememberInfiniteTransition(label = "strip").animateFloat(0.55f, 1f, infiniteRepeatable(tween(280), RepeatMode.Reverse), label = "sp")
+    val stripScale by rememberInfiniteTransition(label = "sc").animateFloat(0.96f, 1.04f, infiniteRepeatable(tween(280), RepeatMode.Reverse), label = "scv")
 
     LaunchedEffect(state.boxLedStatus) {
         if (state.boxLedStatus == LedStatus.RED) {
@@ -880,7 +996,7 @@ private fun SmartMedicineBoxCard(state: SeniorUiState, currentSlotMeds: List<Med
                 Text(if (state.bandConnected) "Band ●" else "Band ○", fontSize = 11.sp,
                     color = if (state.bandConnected) Color(0xFF69F0AE) else Color.Gray)
             }
-            Text("Current: $slotName", fontSize = 12.sp, color = Color.White.copy(alpha = 0.7f))
+            Text("Next up: ${activeSlotLabel.ifBlank { "🎉 All Done Today!" }}  •  Tap any strip to confirm", fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
             if (state.boxLedMessage.isNotBlank()) {
                 Spacer(Modifier.height(8.dp))
                 Surface(shape = RoundedCornerShape(10.dp), color = ledColor.copy(alpha = 0.25f)) {
@@ -904,25 +1020,47 @@ private fun SmartMedicineBoxCard(state: SeniorUiState, currentSlotMeds: List<Med
                     }
                 }
             }
-            if (currentSlotMeds.isNotEmpty()) {
+            if (allMedications.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("Tap your strip:", fontSize = 11.sp, color = Color.White.copy(alpha = 0.7f))
+                Text("ALL MEDICINES — always available:", fontSize = 10.sp, color = Color.White.copy(alpha = 0.55f), letterSpacing = 0.5.sp)
                 Spacer(Modifier.height(6.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    currentSlotMeds.forEach { med ->
+                // Show in rows of 4
+                allMedications.chunked(4).forEach { rowMeds ->
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth()) {
+                    rowMeds.forEach { med ->
                         val c = MedPalette.colorForMedication(med.pillColorHex, med.colorIndex)
-                        val taken = state.todayDoses.find { it.medicationId == med.id }?.isTaken() == true
-                        Surface(shape = RoundedCornerShape(14.dp),
-                            color = if (taken) Color.Gray.copy(alpha = 0.4f) else c.copy(alpha = 0.85f),
-                            modifier = Modifier.weight(1f).clickable(enabled = !taken) { onStripPicked(med.id) }) {
-                            Column(modifier = Modifier.padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(med.pillEmoji, fontSize = 26.sp)
-                                Text(med.name.split(" ").first(), fontSize = 11.sp, color = Color.White,
+                        val doseRecord = state.todayDoses.find { it.medicationId == med.id }
+                        val taken = doseRecord?.isTaken() == true
+                        val missed = doseRecord?.isMissed() == true
+                        val isChecking = checkingMedId == med.id && !taken
+                        Surface(shape = RoundedCornerShape(10.dp),
+                            color = when {
+                                taken   -> Color.Gray.copy(alpha = 0.35f)
+                                missed  -> Color(0xFFD32F2F).copy(alpha = 0.7f)
+                                else    -> c.copy(alpha = if (isChecking) stripPulse else 0.9f)
+                            },
+                            modifier = Modifier.weight(1f)
+                                .scale(if (isChecking) stripScale else 1f)
+                                .clickable {
+                                    if (!taken) {
+                                        checkingMedId = med.id
+                                        onStripPicked(med.id)
+                                    }
+                                }) {
+                            Column(modifier = Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(med.pillEmoji, fontSize = 20.sp)
+                                Text(med.name.split(" ").first(), fontSize = 9.sp, color = Color.White,
                                     fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 1)
-                                if (taken) Text("✅", fontSize = 12.sp)
+                                Text(
+                                    when { isChecking -> "⏳"; taken -> "✅"; missed -> "❌"; else -> "" },
+                                    fontSize = 10.sp
+                                )
                             }
                         }
                     }
+                    if (rowMeds.size < 4) repeat(4 - rowMeds.size) { Spacer(Modifier.weight(1f)) }
+                }
+                Spacer(Modifier.height(4.dp))
                 }
             }
         }
@@ -1006,4 +1144,156 @@ fun DoubleDoseWarningDialog(medicationName: String, takenAt: String, onDismiss: 
 private fun CameraIndicatorDot() {
     val a by rememberInfiniteTransition(label = "cam").animateFloat(0.4f, 1f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "a")
     Box(modifier = Modifier.size(10.dp).alpha(a).clip(CircleShape).background(Color(0xFF4CAF50)))
+}
+
+// ─── Pill Vault Screen ────────────────────────────────────────────────────────
+
+@Composable
+private fun PillVaultScreen(state: SeniorUiState, ts: Float, modifier: Modifier = Modifier) {
+    LazyColumn(
+        modifier = modifier.background(Color(0xFFF0F4F0)),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text("💊 Pill Vault", fontWeight = FontWeight.ExtraBold,
+                fontSize = (22 * ts).sp, color = Color(0xFF1B5E20))
+            Text("Your medicine & mood dashboard", fontSize = (13 * ts).sp, color = Color.Gray)
+        }
+
+        // Medicine Stock Tracker
+        item {
+            Card(modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                shape = RoundedCornerShape(20.dp), elevation = CardDefaults.cardElevation(3.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("📦 Medicine Stock", fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1B5E20), fontSize = (16 * ts).sp)
+                    Spacer(Modifier.height(12.dp))
+                    if (state.medications.isEmpty()) {
+                        Text("No medicines yet", color = Color.Gray, fontSize = (14 * ts).sp)
+                    } else {
+                        state.medications.forEachIndexed { i, med ->
+                            if (i > 0) Spacer(Modifier.height(12.dp))
+                            MedicineStockRow(med = med, ts = ts)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Emotional Journey
+        item {
+            Card(modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFCE4EC)),
+                shape = RoundedCornerShape(20.dp), elevation = CardDefaults.cardElevation(3.dp)) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("💭 Emotional Journey", fontWeight = FontWeight.Bold,
+                        color = Color(0xFFC62828), fontSize = (16 * ts).sp)
+                    Spacer(Modifier.height(8.dp))
+                    if (state.moodHistory.isEmpty()) {
+                        Text("Confirm a dose to start tracking mood",
+                            color = Color.Gray, fontSize = (13 * ts).sp)
+                    } else {
+                        Row(modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            state.moodHistory.take(7).forEach { record ->
+                                val ml = record.moodLevel()
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(ml.emoji, fontSize = (24 * ts).sp)
+                                    Text(ml.label.take(4), fontSize = (8 * ts).sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        val avgScore = state.moodHistory.take(7).map { it.moodLevel().score }.average()
+                        val summary = when {
+                            avgScore >= 4.0 -> "😊 Great week! Feeling positive overall."
+                            avgScore >= 3.0 -> "🙂 A decent week. Keep it up!"
+                            else -> "💛 Tough week. Caregiver has been notified."
+                        }
+                        Surface(shape = RoundedCornerShape(10.dp), color = Color(0xFFFFCDD2)) {
+                            Text(summary, modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                fontSize = (13 * ts).sp, color = Color(0xFF880E4F), fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            }
+        }
+
+        // Vault Concept Card (Hardware Vision)
+        item {
+            Card(modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A237E)),
+                shape = RoundedCornerShape(20.dp), elevation = CardDefaults.cardElevation(6.dp)) {
+                Column(modifier = Modifier.padding(18.dp)) {
+                    Text("🔬 Smart Pill Vault", fontWeight = FontWeight.ExtraBold,
+                        color = Color.White, fontSize = (18 * ts).sp)
+                    Text("Hardware Vision — Coming Soon", color = Color.White.copy(alpha = 0.6f),
+                        fontSize = (12 * ts).sp)
+                    Spacer(Modifier.height(14.dp))
+                    listOf(
+                        "🗃️" to "Smart dispenser tray — medicine auto-drops at the right time",
+                        "📷" to "Camera checks if you actually take the pill",
+                        "😊" to "AI detects your emotion before & after each dose",
+                        "📊" to "Full report sent to caregiver in real-time"
+                    ).forEach { (emoji, text) ->
+                        Row(modifier = Modifier.padding(vertical = 5.dp), verticalAlignment = Alignment.Top) {
+                            Text(emoji, fontSize = (20 * ts).sp)
+                            Spacer(Modifier.width(10.dp))
+                            Text(text, fontSize = (13 * ts).sp, color = Color.White.copy(alpha = 0.88f),
+                                modifier = Modifier.weight(1f))
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Surface(shape = RoundedCornerShape(10.dp), color = Color.White.copy(alpha = 0.15f)) {
+                        Text("🛠️ HACKNEXT'26 Innovation — Patent Pending",
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                            color = Color.White, fontSize = (11 * ts).sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        item { Spacer(Modifier.height(88.dp)) }
+    }
+}
+
+@Composable
+private fun MedicineStockRow(med: Medication, ts: Float) {
+    val color = MedPalette.colorForMedication(med.pillColorHex, med.colorIndex)
+    val maxPills = 30
+    val progress = (med.remainingPills.toFloat() / maxPills.toFloat()).coerceIn(0f, 1f)
+    val dosesPerDay = med.scheduleTimes.size.coerceAtLeast(1)
+    val daysLeft = med.remainingPills / dosesPerDay
+    val isLow = daysLeft <= 7
+    Column {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TabletShapeIcon(color = color, shape = med.shape, size = (28 * ts.coerceIn(1f, 1.3f)).dp)
+            Spacer(Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(med.name, fontWeight = FontWeight.Bold,
+                        fontSize = (14 * ts).sp, color = Color(0xFF1B5E20))
+                    if (isLow) {
+                        Spacer(Modifier.width(6.dp))
+                        Surface(shape = RoundedCornerShape(6.dp), color = Color(0xFFFFEBEE)) {
+                            Text("⚠️ Refill Soon",
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                color = Color(0xFFD32F2F), fontSize = (9 * ts).sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+                Text("${med.remainingPills} pills • ~$daysLeft days left",
+                    fontSize = (11 * ts).sp, color = Color.Gray)
+            }
+        }
+        Spacer(Modifier.height(5.dp))
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)),
+            color = if (isLow) Color(0xFFD32F2F) else color,
+            trackColor = color.copy(alpha = 0.15f)
+        )
+    }
 }

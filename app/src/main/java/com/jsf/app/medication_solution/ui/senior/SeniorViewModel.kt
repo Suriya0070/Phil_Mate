@@ -8,6 +8,7 @@ import com.jsf.app.medication_solution.data.model.DoseRecord
 import com.jsf.app.medication_solution.data.model.DoseStatus
 import com.jsf.app.medication_solution.data.model.Medication
 import com.jsf.app.medication_solution.data.model.MoodLevel
+import com.jsf.app.medication_solution.data.model.MoodRecord
 import com.jsf.app.medication_solution.data.model.User
 import com.jsf.app.medication_solution.data.repository.AuthRepository
 import com.jsf.app.medication_solution.data.repository.MedicationRepository
@@ -55,7 +56,8 @@ data class SeniorUiState(
     val boxLedMessage: String = "",
     val cameraMonitoringActive: Boolean = false,
     val intakeDetected: Boolean? = null,
-    val adherenceStreak: Int = 0
+    val adherenceStreak: Int = 0,
+    val moodHistory: List<MoodRecord> = emptyList()
 )
 
 class SeniorViewModel(app: Application) : AndroidViewModel(app) {
@@ -148,6 +150,13 @@ class SeniorViewModel(app: Application) : AndroidViewModel(app) {
 
                     // Mark missed doses only once per load, not on every Firestore event
                     if (meds.isNotEmpty()) medRepo.markMissedDoses(seniorId)
+
+                    // load mood history once
+                    viewModelScope.launch {
+                        medRepo.getMoodHistory(seniorId).collect { moods ->
+                            _state.value = _state.value.copy(moodHistory = moods)
+                        }
+                    }
 
                     if (meds.isEmpty() && !autoSeeded) {
                         autoSeeded = true
@@ -384,18 +393,48 @@ class SeniorViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun getCurrentSlotMeds(): List<Medication> {
-        val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-        return _state.value.medications.filter { med ->
-            med.scheduleTimes.any { t ->
-                val h = t.split(":").getOrNull(0)?.toIntOrNull() ?: 0
-                when (hour) {
-                    in 6..11 -> h in 6..11
-                    in 12..16 -> h in 12..16
-                    in 17..20 -> h in 17..20
-                    else -> h >= 21 || h < 6
-                }
+        val slots = listOf(6..11, 12..16, 17..20, 21..29)
+        val doses  = _state.value.todayDoses
+        val meds   = _state.value.medications
+
+        // Find the first slot (morning→night) that still has pending doses today
+        for (slot in slots) {
+            val slotPending = doses.filter { dose ->
+                val cal = java.util.Calendar.getInstance()
+                cal.timeInMillis = dose.scheduledTime
+                val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                (if (h < 6) h + 24 else h) in slot && !dose.isTaken() && !dose.isMissed()
+            }
+            if (slotPending.isNotEmpty()) {
+                return meds.filter { med ->
+                    med.scheduleTimes.any { t ->
+                        val h = t.split(":").getOrNull(0)?.toIntOrNull() ?: 0
+                        (if (h < 6) h + 24 else h) in slot
+                    }
+                }.distinctBy { it.name }
             }
         }
+        return emptyList()
+    }
+
+    fun activeSlotLabel(): String {
+        val slots = listOf(
+            6..11  to "🌅 Morning",
+            12..16 to "☀️ Afternoon",
+            17..20 to "🌆 Evening",
+            21..29 to "🌙 Night"
+        )
+        val doses = _state.value.todayDoses
+        for ((slot, label) in slots) {
+            val hasPending = doses.any { dose ->
+                val cal = java.util.Calendar.getInstance()
+                cal.timeInMillis = dose.scheduledTime
+                val h = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                (if (h < 6) h + 24 else h) in slot && !dose.isTaken() && !dose.isMissed()
+            }
+            if (hasPending) return label
+        }
+        return "🎉 All Done Today!"
     }
 
     fun checkFamilyVoiceNote() {
