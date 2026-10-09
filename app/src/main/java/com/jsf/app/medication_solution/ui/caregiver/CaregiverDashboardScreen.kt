@@ -187,14 +187,14 @@ fun CaregiverDashboardScreen(
     ) { padding ->
 
         if (state.isLoading && state.seniorSnapshot == null) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(Modifier.fillMaxSize().background(PageBg), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AccBlue)
             }
             return@Scaffold
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
+            modifier = Modifier.fillMaxSize().background(PageBg).padding(padding),
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
